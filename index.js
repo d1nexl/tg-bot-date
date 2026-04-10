@@ -4,7 +4,7 @@ const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
 
 // Імпорт БД
-const { connectDB, User, Message, Report, Admin, isAdmin, isSuperAdmin, removeAdmin, getAllAdmins, Channel, Broadcast, UserSubscription } = require('./database.js');
+const { connectDB, User, Message, Report, Admin, Channel } = require('./database.js');
 
 // Тимчасове сховище
 const userStates = new Map();
@@ -16,7 +16,7 @@ const SUPPORT_CONTACT = process.env.SUPPORT_CONTACT || '@тут_нік';
 
 // Імпорт кнопок
 const startHandler = require('./handlers/start.js');
-const { whoToFindKeyboard, whoAreYouKeyboard, districtKeyboard, mainMenuKeyboard, settingsKeyboard } = require('./utils/keyboard.js');
+const { whoToFindKeyboard, whoAreYouKeyboard, districtKeyboard, settingsKeyboard } = require('./utils/keyboard.js');
 
 // Підключення до БД
 connectDB();
@@ -183,34 +183,6 @@ async function answerCallback(callbackQuery, text = '', showAlert = false) {
   } catch (error) {}
 }
 
-// Функція пошуку користувачів
-async function findMatches(userId, userData) {
-  try {
-    let findCondition = {};
-    
-    if (userData.findGender === 'find_boys') {
-      findCondition.userGender = 'iam_boy';
-    } else if (userData.findGender === 'find_girls') {
-      findCondition.userGender = 'iam_girl';
-    }
-    
-    if (userData.district !== 'dist_all') {
-      findCondition.district = userData.district;
-    }
-    
-    const matches = await User.find({
-      telegramId: { $ne: userId },
-      isBlocked: false,
-      ...findCondition
-    }).limit(50);
-    
-    return matches;
-  } catch (error) {
-    console.error('Помилка пошуку:', error);
-    return [];
-  }
-}
-
 // Функція спроби знайти пару для користувача з черги
 async function tryFindMatch(userId) {
   const waitingList = Array.from(waitingUsers.keys());
@@ -326,7 +298,7 @@ async function updateUserProfile(userId, field, value, chatId) {
 }
 
 // Функція для перевірки підписки та відправки кнопок
-async function requireSubscriptionWithButtons(userId, chatId, showMessage = true, forceCheck = true) {
+async function requireSubscriptionWithButtons(userId, chatId, showMessage = true) {
   const channels = await Channel.find({ isActive: true });
   
   if (channels.length === 0) return true;
