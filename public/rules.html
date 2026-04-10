@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Правила користування | Анонімні знайомства</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --bg-secondary: #11182d;
+      --card: rgba(255, 255, 255, 0.08);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --text: #f3f6ff;
+      --muted: #aeb8d3;
+      --accent: #7c5cff;
+      --accent-2: #27d7ff;
+      --danger: #ff5f7a;
+      --success: #3ddc97;
+      --warning: #ffcc66;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      --radius: 24px;
+      --radius-sm: 16px;
+      --maxw: 980px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(124, 92, 255, 0.22), transparent 30%),
+        radial-gradient(circle at top right, rgba(39, 215, 255, 0.16), transparent 30%),
+        linear-gradient(180deg, #0a0f1d 0%, #0d1324 100%);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    .wrapper {
+      width: min(var(--maxw), calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 60px;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      background: linear-gradient(135deg, rgba(124, 92, 255, 0.18), rgba(39, 215, 255, 0.12));
+      backdrop-filter: blur(12px);
+      border-radius: 32px;
+      padding: 38px 24px;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.04), transparent 40%);
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.10);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(30px, 5vw, 54px);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: clamp(16px, 2vw, 19px);
+    }
+
+    .quick-info {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin: 24px 0 30px;
+    }
+
+    .quick-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .quick-card strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+
+    .quick-card span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .section {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 28px 22px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      backdrop-filter: blur(12px);
+    }
+
+    .section h2 {
+      margin: 0 0 14px;
+      font-size: clamp(22px, 3vw, 30px);
+      letter-spacing: -0.02em;
+    }
+
+    .section p.lead {
+      margin: 0 0 18px;
+      color: var(--muted);
+    }
+
+    .rules {
+      display: grid;
+      gap: 14px;
+    }
+
+    .rule {
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 14px;
+      align-items: start;
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .rule-number {
+      width: 54px;
+      height: 54px;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      font-weight: 700;
+      font-size: 18px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: white;
+      box-shadow: 0 10px 30px rgba(124, 92, 255, 0.25);
+    }
+
+    .rule h3 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+
+    .rule p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .mini-box {
+      padding: 18px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .mini-box h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .mini-box ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+
+    .mini-box li + li {
+      margin-top: 8px;
+    }
+
+    .danger {
+      border-color: rgba(255, 95, 122, 0.25);
+      background: rgba(255, 95, 122, 0.08);
+    }
+
+    .danger h3 {
+      color: #ffd7df;
+    }
+
+    .safe {
+      border-color: rgba(61, 220, 151, 0.24);
+      background: rgba(61, 220, 151, 0.08);
+    }
+
+    .safe h3 {
+      color: #d7fff0;
+    }
+
+    .footer-note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .cta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .btn {
+      appearance: none;
+      border: 0;
+      text-decoration: none;
+      color: white;
+      padding: 14px 18px;
+      border-radius: 14px;
+      font-weight: 600;
+      transition: transform .18s ease, opacity .18s ease, box-shadow .18s ease;
+      box-shadow: var(--shadow);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      opacity: 0.96;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .highlight {
+      color: white;
+      font-weight: 600;
+    }
+
+    .warning-line {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-left: 4px solid var(--warning);
+      background: rgba(255, 204, 102, 0.08);
+      border-radius: 12px;
+      color: #f7e6b5;
+    }
+
+    @media (max-width: 860px) {
+      .quick-info,
+      .grid-two {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        padding: 30px 18px;
+      }
+
+      .section {
+        padding: 22px 16px;
+      }
+
+      .rule {
+        grid-template-columns: 46px 1fr;
+      }
+
+      .rule-number {
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        font-size: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <section class="hero">
+      <div class="badge">🔒 Анонімне спілкування • Безпека • Повага</div>
+      <h1>Правила користування ботом</h1>
+      <p>
+        Ці правила створені для того, щоб у боті було комфортно, безпечно і приємно спілкуватися.
+        Користуючись ботом, ви автоматично погоджуєтесь дотримуватись цих умов.
+      </p>
+
+      <div class="quick-info">
+        <div class="quick-card">
+          <strong>Анонімність</strong>
+          <span>Не розкривайте особисті дані без повної впевненості.</span>
+        </div>
+        <div class="quick-card">
+          <strong>Повага</strong>
+          <span>Не ображайте, не принижуйте та не провокуйте інших.</span>
+        </div>
+        <div class="quick-card">
+          <strong>Безпека</strong>
+          <span>Підозріла поведінка може призвести до блокування.</span>
+        </div>
+      </div>
+
+      <div class="cta">
+        <a href="https://t.me/anonymouschat47_bot" class="btn btn-primary">Перейти до боту</a>
+        <a href="#rules" class="btn btn-secondary">Читати правила</a>
+      </div>
+    </section>
+
+    <section class="section" id="rules">
+      <h2>Основні правила</h2>
+      <p class="lead">
+        Тут коротко і по ділу: що можна, що не можна і за що можна отримати блокування.
+      </p>
+
+      <div class="rules">
+        <div class="rule">
+          <div class="rule-number">1</div>
+          <div>
+            <h3>Будьте ввічливими</h3>
+            <p>
+              Поважайте співрозмовника. Образи, приниження, агресія, токсична поведінка
+              або навмисні провокації заборонені.
+            </p>
+          </div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-number">2</div>
+          <div>
+            <h3>Без спаму та флуду</h3>
+            <p>
+              Заборонено надсилати однакові повідомлення, рекламу, безглуздий спам,
+              масові розсилки або нав'язливі повідомлення.
+            </p>
+          </div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-number">3</div>
+          <div>
+            <h3>Без шахрайства</h3>
+            <p>
+              Заборонені будь-які схеми обману, виманювання грошей, фейкові історії,
+              підозрілі посилання, прохання про оплату чи передачу даних картки.
+            </p>
+          </div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-number">4</div>
+          <div>
+            <h3>Не надсилайте заборонений контент</h3>
+            <p>
+              Заборонено надсилати порнографію, жорстокий контент, погрози, шок-контент,
+              матеріали з насильством або будь-який незаконний контент.
+            </p>
+          </div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-number">5</div>
+          <div>
+            <h3>Не видавайте себе за когось іншого</h3>
+            <p>
+              Не можна навмисно вводити людей в оману, видавати себе за іншу особу,
+              адміністрацію, підтримку або використовувати чужу особистість.
+            </p>
+          </div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-number">6</div>
+          <div>
+            <h3>Бережіть конфіденційність</h3>
+            <p>
+              Не публікуйте чужі особисті дані. Не просіть у співрозмовника паролі,
+              банківські дані, документи, адресу чи іншу чутливу інформацію.
+            </p>
+          </div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-number">7</div>
+          <div>
+            <h3>Не обходьте блокування</h3>
+            <p>
+              Якщо користувач був заблокований за порушення правил, створення нових акаунтів
+              для обходу обмежень може призвести до повторного і остаточного блокування.
+            </p>
+          </div>
+        </div>
+
+        <div class="rule">
+          <div class="rule-number">8</div>
+          <div>
+            <h3>Користуйтеся скаргами чесно</h3>
+            <p>
+              Якщо співрозмовник порушує правила — надсилайте скаргу. Але навмисні фейкові
+              скарги або зловживання системою теж вважаються порушенням.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="warning-line">
+        ⚠️ Адміністрація має право обмежити доступ до бота без попередження у випадку серйозних або повторних порушень.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Що дозволено, а що ні</h2>
+      <div class="grid-two">
+        <div class="mini-box safe">
+          <h3>✅ Дозволено</h3>
+          <ul>
+            <li>Знайомитися, спілкуватися, шукати нових людей.</li>
+            <li>Ввічливо завершити діалог, якщо вам некомфортно.</li>
+            <li>Надіслати скаргу, якщо співрозмовник порушує правила.</li>
+            <li>Ділитися контактами лише за власним бажанням.</li>
+            <li>Користуватися ботом у межах нормального, безпечного спілкування.</li>
+          </ul>
+        </div>
+
+        <div class="mini-box danger">
+          <h3>❌ Заборонено</h3>
+          <ul>
+            <li>Ображати, переслідувати, принижувати або шантажувати.</li>
+            <li>Розсилати рекламу, спам, сумнівні посилання.</li>
+            <li>Просити гроші, фото документів, дані картки чи паролі.</li>
+            <li>Надсилати сексуальний або жорстокий контент без згоди.</li>
+            <li>Погрожувати, вимагати або займатися шахрайством.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Поради для безпечного спілкування</h2>
+      <div class="grid-two">
+        <div class="mini-box">
+          <h3>🔒 Захищайте себе</h3>
+          <ul>
+            <li>Не передавайте свій номер, адресу чи інші приватні дані занадто швидко.</li>
+            <li>Не переходьте за підозрілими посиланнями.</li>
+            <li>Не довіряйте одразу людям, які просять гроші або тиснуть на жалість.</li>
+          </ul>
+        </div>
+
+        <div class="mini-box">
+          <h3>💬 Якщо щось не так</h3>
+          <ul>
+            <li>Одразу завершуйте чат, якщо вам некомфортно.</li>
+            <li>Користуйтеся кнопкою скарги при порушеннях.</li>
+            <li>Не продовжуйте діалог із токсичним або підозрілим співрозмовником.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Відповідальність користувача</h2>
+      <p class="lead">
+        Ви самостійно відповідаєте за повідомлення, які надсилаєте через бота, і за дії після переходу
+        в особисте спілкування поза ботом.
+      </p>
+      <p>
+        Адміністрація намагається підтримувати порядок, але не може гарантувати абсолютну безпеку
+        кожної розмови. Тому завжди дійте обережно, не поспішайте довіряти незнайомим людям
+        і користуйтеся ботом відповідально.
+      </p>
+    </section>
+
+    <p class="footer-note">
+      Останнє оновлення правил — 2026 • Анонімні знайомства
+    </p>
+  </div>
+</body>
+</html>

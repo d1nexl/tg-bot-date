@@ -349,6 +349,10 @@ async function startServer() {
     
     console.log('✅ Моделі БД завантажено');
     
+    app.get('/rules', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'rules.html'));
+});
+
     // Запускаємо сервер
     app.listen(PORT, () => {
       console.log(`🌐 Адмін-панель: http://localhost:${PORT}/admin`);
