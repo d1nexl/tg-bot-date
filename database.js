@@ -45,7 +45,9 @@ const reportSchema = new mongoose.Schema({
   reason: String,
   messageId: Number,
   timestamp: { type: Date, default: Date.now },
-  status: { type: String, default: 'pending' }
+  status: { type: String, default: 'pending' },
+  resolvedBy: Number,
+  resolvedAt: Date
 });
 
 // Схема для адмінів
@@ -54,7 +56,7 @@ const adminSchema = new mongoose.Schema({
   username: String,
   firstName: String,
   lastName: String,
-  role: { type: String, default: 'admin' }, // admin, super_admin
+  role: { type: String, default: 'admin', enum: ['admin', 'super_admin'] }, // admin, super_admin
   addedAt: { type: Date, default: Date.now },
   addedBy: Number
 });
@@ -64,6 +66,12 @@ const Admin = mongoose.model('Admin', adminSchema);
 // Функція для перевірки чи є користувач адміном
 async function isAdmin(telegramId) {
   const admin = await Admin.findOne({ telegramId });
+  return admin !== null;
+}
+
+// Функція для перевірки чи є супер-адміном
+async function isSuperAdmin(telegramId) {
+  const admin = await Admin.findOne({ telegramId, role: 'super_admin' });
   return admin !== null;
 }
 
@@ -99,9 +107,32 @@ const Channel = mongoose.model('Channel', channelSchema);
 const Broadcast = mongoose.model('Broadcast', broadcastSchema);
 const UserSubscription = mongoose.model('UserSubscription', userSubscriptionSchema);
 
-
 const User = mongoose.model('User', userSchema);
 const Message = mongoose.model('Message', messageSchema);
 const Report = mongoose.model('Report', reportSchema);
 
-module.exports = { connectDB, User, Message, Report, Admin, isAdmin, Channel, Broadcast, UserSubscription };
+// Функція для видалення адміна
+async function removeAdmin(telegramId) {
+  const result = await Admin.deleteOne({ telegramId });
+  return result.deletedCount > 0;
+}
+
+// Функція для отримання всіх адмінів
+async function getAllAdmins() {
+  return await Admin.find().sort({ role: -1, addedAt: 1 });
+}
+
+module.exports = { 
+  connectDB, 
+  User, 
+  Message, 
+  Report, 
+  Admin, 
+  isAdmin, 
+  isSuperAdmin, 
+  removeAdmin,
+  getAllAdmins,
+  Channel, 
+  Broadcast, 
+  UserSubscription 
+};

@@ -36,8 +36,20 @@ async function checkAuth() {
     currentAdmin = data.admin;
     const adminInfoDiv = document.getElementById('adminInfo');
     if (adminInfoDiv) {
-      adminInfoDiv.innerHTML = `👋 ${currentAdmin?.firstName || 'Admin'}<br><small>ID: ${currentAdminId}</small>`;
+      const roleText = currentAdmin?.role === 'super_admin' ? '👑 Супер-адмін' : '🛡️ Адмін';
+      adminInfoDiv.innerHTML = `👋 ${currentAdmin?.firstName || 'Admin'}<br><small>${roleText}<br>ID: ${currentAdminId}</small>`;
     }
+    
+    // Показуємо/ховаємо кнопку додавання адміна в залежності від ролі
+    const addAdminSection = document.querySelector('.add-admin');
+    if (addAdminSection) {
+      if (currentAdmin?.role !== 'super_admin') {
+        addAdminSection.style.display = 'none';
+      } else {
+        addAdminSection.style.display = 'block';
+      }
+    }
+    
     return true;
   } catch (error) {
     console.error('Auth error:', error);
@@ -361,7 +373,7 @@ async function loadUsers() {
             </tr>
           `).join('')}
         </tbody>
-      </table>
+       </table>
     `;
   } catch (error) {
     console.error('Error loading users:', error);
@@ -476,33 +488,60 @@ async function loadAdmins() {
       return;
     }
     
-    container.innerHTML = admins.map(admin => `
-      <div class="admin-card">
-        <div class="admin-card-info">
-          ${createAvatar(admin.firstName || admin.telegramId, admin.telegramId)}
-          <div>
-            <strong>${escapeHtml(admin.firstName || 'Admin')} ${escapeHtml(admin.lastName || '')}</strong><br>
-            <small>ID: ${admin.telegramId} | @${escapeHtml(admin.username || 'немає')}</small><br>
-            <small>Доданий: ${new Date(admin.addedAt).toLocaleString()}</small>
+    container.innerHTML = admins.map(admin => {
+      const isSuper = admin.role === 'super_admin';
+      const isCurrent = admin.telegramId == currentAdminId;
+      return `
+        <div class="admin-card">
+          <div class="admin-card-info">
+            ${createAvatar(admin.firstName || admin.telegramId, admin.telegramId)}
+            <div>
+              <strong>${escapeHtml(admin.firstName || 'Admin')} ${escapeHtml(admin.lastName || '')}</strong>
+              ${isSuper ? '<span class="super-admin-badge">👑 Супер-адмін</span>' : '<span class="admin-badge">🛡️ Адмін</span>'}
+              <br>
+              <small>ID: ${admin.telegramId} | @${escapeHtml(admin.username || 'немає')}</small><br>
+              <small>Доданий: ${new Date(admin.addedAt).toLocaleString()}</small>
+            </div>
           </div>
+          ${!isCurrent && currentAdmin?.role === 'super_admin' ? 
+            `<button class="remove-admin" onclick="removeAdmin(${admin.telegramId})">❌ Видалити</button>` : 
+            isCurrent ? '<span class="admin-badge">👑 Ви</span>' : ''
+          }
         </div>
-        ${admin.telegramId != currentAdminId ? `<button class="remove-admin" onclick="removeAdmin(${admin.telegramId})">❌ Видалити</button>` : '<span class="admin-badge">👑 Ви</span>'}
-      </div>
-    `).join('');
+      `;
+    }).join('');
   } catch (error) {
     console.error('Error loading admins:', error);
+    const container = document.getElementById('adminsList');
+    if (error.message.includes('403')) {
+      container.innerHTML = '<div class="loading"><span>⚠️ Тільки супер-адмін може переглядати список адмінів</span></div>';
+    } else {
+      container.innerHTML = '<div class="loading"><span>❌ Помилка завантаження адмінів</span></div>';
+    }
   }
 }
 
-// Додати адміна
+// Додати адміна (оновлена функція)
 async function addAdmin() {
-  const telegramId = parseInt(document.getElementById('newAdminId').value);
-  const name = document.getElementById('newAdminName').value;
+  const targetTelegramId = parseInt(document.getElementById('newAdminId').value);
+  const firstName = document.getElementById('newAdminName').value || 'Admin';
+  const username = document.getElementById('newAdminUsername')?.value || '';
+  const role = document.getElementById('newAdminRole')?.value || 'admin';
   
-  if (!telegramId) {
+  if (!targetTelegramId) {
     alert('Введіть Telegram ID');
     return;
   }
+  
+  if (isNaN(targetTelegramId)) {
+    alert('Telegram ID має бути числом');
+    return;
+  }
+  
+  const addBtn = document.querySelector('.add-admin-form button');
+  const originalText = addBtn.textContent;
+  addBtn.textContent = '⏳ Додаємо...';
+  addBtn.disabled = true;
   
   try {
     const response = await fetch('/api/add-admin', {
@@ -511,20 +550,32 @@ async function addAdmin() {
         'X-Telegram-Id': currentAdminId,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ telegramId, firstName: name })
+      body: JSON.stringify({ 
+        targetTelegramId, 
+        firstName, 
+        username,
+        role 
+      })
     });
     
     const result = await response.json();
     if (result.success) {
       document.getElementById('newAdminId').value = '';
       document.getElementById('newAdminName').value = '';
+      if (document.getElementById('newAdminUsername')) {
+        document.getElementById('newAdminUsername').value = '';
+      }
+      alert(`✅ Адміна ${targetTelegramId} успішно додано!`);
       loadAdmins();
     } else {
-      alert(result.error);
+      alert(result.error || 'Помилка при додаванні адміна');
     }
   } catch (error) {
     console.error('Error adding admin:', error);
     alert('Помилка при додаванні адміна');
+  } finally {
+    addBtn.textContent = originalText;
+    addBtn.disabled = false;
   }
 }
 
@@ -533,13 +584,21 @@ async function removeAdmin(telegramId) {
   if (!confirm(`Видалити адміна ${telegramId}?`)) return;
   
   try {
-    await fetch(`/api/remove-admin/${telegramId}`, {
+    const response = await fetch(`/api/remove-admin/${telegramId}`, {
       method: 'DELETE',
       headers: { 'X-Telegram-Id': currentAdminId }
     });
-    loadAdmins();
+    
+    const result = await response.json();
+    if (result.success) {
+      alert(`✅ Адміна ${telegramId} видалено`);
+      loadAdmins();
+    } else {
+      alert(result.error || 'Помилка при видаленні адміна');
+    }
   } catch (error) {
     console.error('Error removing admin:', error);
+    alert('Помилка при видаленні адміна');
   }
 }
 
@@ -598,6 +657,7 @@ function toggleSidebar() {
 // Вихід
 function logout() {
   localStorage.removeItem('adminTelegramId');
+  sessionStorage.removeItem('adminPassword');
   window.location.href = '/login';
 }
 

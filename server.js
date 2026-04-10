@@ -45,6 +45,12 @@ async function checkAdmin(req, res, next) {
   }
 }
 
+// Перевірка чи є супер-адміном (для додавання/видалення адмінів)
+async function isSuperAdmin(telegramId) {
+  const admin = await Admin.findOne({ telegramId });
+  return admin && admin.role === 'super_admin';
+}
+
 // API маршрути
 
 // Перевірка авторизації
@@ -206,9 +212,20 @@ app.post('/api/resolve-report/:reportId', checkAdmin, async (req, res) => {
   }
 });
 
-// Отримати список адмінів
-app.get('/api/admins', checkAdmin, async (req, res) => {
+// Отримати список адмінів (тільки для супер-адміна)
+app.get('/api/admins', async (req, res) => {
+  const telegramId = parseInt(req.headers['x-telegram-id']);
+  
+  if (!telegramId) {
+    return res.status(403).json({ error: 'Необхідна авторизація' });
+  }
+  
   try {
+    const isSuper = await isSuperAdmin(telegramId);
+    if (!isSuper) {
+      return res.status(403).json({ error: 'Доступ заборонено. Тільки супер-адмін може керувати адмінами.' });
+    }
+    
     const admins = await Admin.find().sort({ addedAt: -1 });
     res.json(admins);
   } catch (error) {
@@ -217,27 +234,75 @@ app.get('/api/admins', checkAdmin, async (req, res) => {
   }
 });
 
-// Додати адміна
-app.post('/api/add-admin', checkAdmin, async (req, res) => {
+// Додати адміна (тільки для супер-адміна)
+app.post('/api/add-admin', async (req, res) => {
+  const telegramId = parseInt(req.headers['x-telegram-id']);
+  
+  if (!telegramId) {
+    return res.status(403).json({ error: 'Необхідна авторизація' });
+  }
+  
   try {
-    const { telegramId, username, firstName, lastName } = req.body;
+    const isSuper = await isSuperAdmin(telegramId);
+    if (!isSuper) {
+      return res.status(403).json({ error: 'Доступ заборонено. Тільки супер-адмін може додавати адмінів.' });
+    }
     
-    const existing = await Admin.findOne({ telegramId });
+    const { targetTelegramId, username, firstName, lastName, role } = req.body;
+    
+    if (!targetTelegramId) {
+      return res.status(400).json({ error: 'Вкажіть Telegram ID' });
+    }
+    
+    const existing = await Admin.findOne({ telegramId: targetTelegramId });
     if (existing) {
       return res.status(400).json({ error: 'Користувач вже є адміном' });
     }
     
     const newAdmin = new Admin({
-      telegramId,
-      username,
-      firstName,
-      lastName,
-      addedBy: req.telegramId
+      telegramId: targetTelegramId,
+      username: username || null,
+      firstName: firstName || 'Admin',
+      lastName: lastName || '',
+      role: role || 'admin',
+      addedBy: telegramId
     });
     await newAdmin.save();
-    res.json({ success: true });
+    
+    res.json({ success: true, admin: newAdmin });
   } catch (error) {
     console.error('Помилка add-admin:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Видалити адміна (тільки для супер-адміна)
+app.delete('/api/remove-admin/:targetTelegramId', async (req, res) => {
+  const telegramId = parseInt(req.headers['x-telegram-id']);
+  const targetTelegramId = parseInt(req.params.targetTelegramId);
+  
+  if (!telegramId) {
+    return res.status(403).json({ error: 'Необхідна авторизація' });
+  }
+  
+  try {
+    const isSuper = await isSuperAdmin(telegramId);
+    if (!isSuper) {
+      return res.status(403).json({ error: 'Доступ заборонено. Тільки супер-адмін може видаляти адмінів.' });
+    }
+    
+    if (telegramId === targetTelegramId) {
+      return res.status(400).json({ error: 'Не можна видалити самого себе' });
+    }
+    
+    const result = await Admin.deleteOne({ telegramId: targetTelegramId });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Адміна не знайдено' });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Помилка remove-admin:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -246,30 +311,15 @@ app.post('/api/add-admin', checkAdmin, async (req, res) => {
 app.post('/api/check-password', (req, res) => {
   const { password } = req.body;
   const adminPassword = process.env.ADMIN_PASSWORD;
-if (!adminPassword) {
-  console.error('❌ ADMIN_PASSWORD не встановлено в .env');
-  process.exit(1);
-}
+  if (!adminPassword) {
+    console.error('❌ ADMIN_PASSWORD не встановлено в .env');
+    return res.status(500).json({ error: 'Пароль не налаштовано' });
+  }
   
   if (password === adminPassword) {
     res.json({ success: true });
   } else {
     res.json({ success: false });
-  }
-});
-
-// Видалити адміна
-app.delete('/api/remove-admin/:telegramId', checkAdmin, async (req, res) => {
-  try {
-    const targetId = parseInt(req.params.telegramId);
-    if (targetId === req.telegramId) {
-      return res.status(400).json({ error: 'Не можна видалити самого себе' });
-    }
-    await Admin.deleteOne({ telegramId: targetId });
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Помилка remove-admin:', error);
-    res.status(500).json({ error: error.message });
   }
 });
 

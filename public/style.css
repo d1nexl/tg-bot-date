@@ -362,13 +362,10 @@ body {
   border-radius: 16px;
   font-size: 14px;
   line-height: 1.5;
-
   max-width: 100%;
-  
-  /* ГОЛОВНЕ */
-  white-space: pre-wrap;      /* зберігає переноси */
-  word-break: break-word;     /* переносить довгі слова */
-  overflow-wrap: anywhere;    /* не ламає верстку */
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .message.incoming .message-bubble {
@@ -626,8 +623,10 @@ body {
   flex-wrap: wrap;
 }
 
-.add-admin-form input {
+.add-admin-form input,
+.add-admin-form select {
   flex: 1;
+  min-width: 150px;
   padding: 12px 16px;
   border: 2px solid #e2e8f0;
   border-radius: 12px;
@@ -635,7 +634,8 @@ body {
   transition: all 0.2s;
 }
 
-.add-admin-form input:focus {
+.add-admin-form input:focus,
+.add-admin-form select:focus {
   outline: none;
   border-color: #667eea;
 }
@@ -656,6 +656,13 @@ body {
   box-shadow: 0 4px 12px rgba(102,126,234,0.4);
 }
 
+.info-text {
+  display: block;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
 .admins-list {
   background: white;
   border-radius: 24px;
@@ -674,6 +681,37 @@ body {
 
 .admin-card:last-child {
   border-bottom: none;
+}
+
+.admin-card-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-card-info .avatar {
+  width: 44px;
+  height: 44px;
+}
+
+.super-admin-badge {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  margin-left: 8px;
+}
+
+.admin-badge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  margin-left: 8px;
 }
 
 .remove-admin {
@@ -703,6 +741,7 @@ body {
   position: relative;
   flex-shrink: 0;
   transition: transform 0.2s ease;
+  cursor: pointer;
 }
 
 .avatar:hover {
@@ -854,109 +893,7 @@ body {
   text-align: right;
 }
 
-/* Chat header */
-.chat-header {
-  display: none;
-}
-
-/* Альтернатива - мінімальний заголовок тільки при наведенні */
-.chat-header-mini {
-  position: sticky;
-  top: 0;
-  background: rgba(255,255,255,0.95);
-  backdrop-filter: blur(10px);
-  padding: 8px 16px;
-  margin: -10px -10px 10px -10px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  z-index: 10;
-  opacity: 0;
-  transition: opacity 0.2s;
-  pointer-events: none;
-}
-
-.chat-messages:hover .chat-header-mini {
-  opacity: 1;
-}
-
-.chat-header-mini .avatar {
-  width: 24px;
-  height: 24px;
-}
-
-.chat-header-mini .avatar-initials {
-  font-size: 10px;
-}
-
-.chat-header-mini span {
-  font-size: 11px;
-  color: #64748b;
-}
-
-.chat-header-info p {
-  font-size: 11px;
-  color: #94a3b8;
-  margin-top: 2px;
-}
-
-/* User avatar in table */
-.user-avatar-cell {
-  width: 50px;
-  padding: 8px !important;
-}
-
-.user-avatar-cell .avatar {
-  width: 36px;
-  height: 36px;
-}
-
-.user-avatar-cell .avatar-initials {
-  font-size: 12px;
-}
-
-/* Admin card with avatar */
-.admin-card-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.admin-card-info .avatar {
-  width: 44px;
-  height: 44px;
-}
-
-.admin-badge {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-  color: white;
-}
-
-/* Report users */
-.report-users {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.report-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #f0f2f5;
-}
-
-
+/* User modal */
 .user-modal {
   position: fixed;
   top: 0;
@@ -1115,31 +1052,38 @@ body {
   background: #bbf7d0;
 }
 
-/* Chat header compact */
-.chat-header {
+/* User avatar in table */
+.user-avatar-cell {
+  width: 50px;
+  padding: 8px !important;
+}
+
+.user-avatar-cell .avatar {
+  width: 36px;
+  height: 36px;
+}
+
+.user-avatar-cell .avatar-initials {
+  font-size: 12px;
+}
+
+/* Report users */
+.report-users {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 20px;
-  background: white;
-  border-bottom: 1px solid #e2e8f0;
-  border-radius: 20px 20px 0 0;
-}
-
-.chat-header-avatars .avatar {
-  width: 32px;
-  height: 32px;
-}
-
-.chat-header-info h3 {
+  gap: 8px;
   font-size: 13px;
-  font-weight: 600;
-  color: #1e293b;
 }
 
-/* Clickable avatar */
-.avatar {
-  cursor: pointer;
+.report-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f2f5;
 }
 
 /* Responsive */
@@ -1193,21 +1137,18 @@ body {
     flex-direction: column;
   }
   
+  .add-admin-form input,
+  .add-admin-form select {
+    width: 100%;
+  }
+  
   .report-header {
     flex-direction: column;
     align-items: flex-start;
   }
-
-   .message-content {
+  
+  .message-content {
     max-width: 85%;
-  }
-  
-  .chat-header {
-    padding: 12px 16px;
-  }
-  
-  .chat-header-info h3 {
-    font-size: 12px;
   }
   
   .report-footer {

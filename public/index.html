@@ -169,15 +169,21 @@
       <div id="page-admins" class="page">
         <div class="page-header">
           <h1>Адміністратори</h1>
-          <p>Управління доступом</p>
+          <p>Управління доступом (тільки для супер-адміна)</p>
         </div>
         <div class="add-admin">
           <h3>➕ Додати адміністратора</h3>
           <div class="add-admin-form">
-            <input type="number" id="newAdminId" placeholder="Telegram ID">
+            <input type="number" id="newAdminId" placeholder="Telegram ID (обов'язково)">
             <input type="text" id="newAdminName" placeholder="Ім'я (опціонально)">
-            <button onclick="addAdmin()">Додати</button>
+            <input type="text" id="newAdminUsername" placeholder="Username (опціонально)">
+            <select id="newAdminRole">
+              <option value="admin">🛡️ Адмін</option>
+              <option value="super_admin">👑 Супер-адмін</option>
+            </select>
+            <button onclick="addAdmin()">➕ Додати</button>
           </div>
+          <small class="info-text">💡 Супер-адмін має повний доступ, включаючи додавання/видалення інших адмінів</small>
         </div>
         <div class="admins-list" id="adminsList">
           <div class="loading">
