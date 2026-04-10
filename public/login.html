@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Вхід в адмін-панель</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-container {
+      background: white;
+      border-radius: 24px;
+      padding: 40px 32px;
+      max-width: 450px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+
+    .logo {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 28px;
+      color: #1a1a2e;
+      margin-bottom: 12px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 32px;
+      font-size: 14px;
+    }
+
+    .input-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #333;
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 2px solid #e0e0e0;
+      border-radius: 12px;
+      font-size: 16px;
+      transition: all 0.3s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(102,126,234,0.4);
+    }
+
+    .error {
+      background: #fee2e2;
+      color: #dc2626;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .info {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid #eee;
+      font-size: 13px;
+      color: #999;
+    }
+
+    @media (max-width: 480px) {
+      .login-container {
+        padding: 32px 20px;
+      }
+      h1 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="logo">🛡️</div>
+    <h1>Адмін-панель</h1>
+    <p class="subtitle">Введіть ваші облікові дані</p>
+    
+    <div id="error" class="error"></div>
+    
+    <div class="input-group">
+      <label>🔑 Пароль</label>
+      <input type="password" id="password" placeholder="Введіть пароль" autocomplete="off">
+    </div>
+    
+    <div class="input-group">
+      <label>🆔 Telegram ID</label>
+      <input type="number" id="telegramId" placeholder="Наприклад: 818447502" autocomplete="off">
+    </div>
+    
+    <button onclick="login()">Увійти</button>
+    
+    <div class="info">
+      <p>⚠️ Тільки для адміністраторів</p>
+      <p>Ваш Telegram ID можна знайти в боті @userinfobot</p>
+    </div>
+  </div>
+
+  <script>
+   // Пароль перевіряється на сервері
+    
+    async function login() {
+  const password = document.getElementById('password').value;
+  const telegramId = document.getElementById('telegramId').value;
+  const errorDiv = document.getElementById('error');
+  
+  if (!password) {
+    errorDiv.textContent = 'Введіть пароль';
+    errorDiv.style.display = 'block';
+    return;
+  }
+  
+  if (!telegramId) {
+    errorDiv.textContent = 'Введіть Telegram ID';
+    errorDiv.style.display = 'block';
+    return;
+  }
+  
+  try {
+    // Перевірка пароля на сервері
+    const passResponse = await fetch('/api/check-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    const passData = await passResponse.json();
+    
+    if (!passData.success) {
+      errorDiv.textContent = 'Невірний пароль';
+      errorDiv.style.display = 'block';
+      return;
+    }
+    
+    // Перевірка Telegram ID
+    const response = await fetch('/api/check-auth', {
+      headers: { 'X-Telegram-Id': telegramId }
+    });
+    const data = await response.json();
+    
+    if (data.isAdmin) {
+      localStorage.setItem('adminTelegramId', telegramId);
+      sessionStorage.setItem('adminPassword', 'true');
+      window.location.href = '/admin';
+    } else {
+      errorDiv.textContent = 'У вас немає доступу до адмін-панелі';
+      errorDiv.style.display = 'block';
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    errorDiv.textContent = 'Помилка підключення до сервера';
+    errorDiv.style.display = 'block';
+  }
+}
+    
+    // Вхід по Enter
+    function handleEnter(e) {
+      if (e.key === 'Enter') {
+        login();
+      }
+    }
+    
+    document.getElementById('password').addEventListener('keypress', handleEnter);
+    document.getElementById('telegramId').addEventListener('keypress', handleEnter);
+  </script>
+</body>
+</html>

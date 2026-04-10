@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Admin Panel | Бот знайомств</title>
+  <link rel="stylesheet" href="/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 2L2 9L16 16L30 9L16 2Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 16L16 23L30 16" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 23L16 30L30 23" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h2>Admin Panel</h2>
+        <p class="sidebar-subtitle">Dating Bot</p>
+      </div>
+      
+      <nav class="nav">
+        <button class="nav-btn active" data-page="dashboard">
+          <span class="nav-icon">📊</span>
+          <span class="nav-text">Дашборд</span>
+        </button>
+        <button class="nav-btn" data-page="chats">
+          <span class="nav-icon">💬</span>
+          <span class="nav-text">Чати</span>
+          <span class="badge" id="chatsBadge">0</span>
+        </button>
+        <button class="nav-btn" data-page="users">
+          <span class="nav-icon">👥</span>
+          <span class="nav-text">Користувачі</span>
+        </button>
+        <button class="nav-btn" data-page="reports">
+          <span class="nav-icon">⚠️</span>
+          <span class="nav-text">Скарги</span>
+          <span class="badge danger" id="reportsBadge">0</span>
+        </button>
+        <button class="nav-btn" data-page="admins">
+          <span class="nav-icon">👑</span>
+          <span class="nav-text">Адміни</span>
+        </button>
+      </nav>
+      
+      <div class="sidebar-footer">
+        <div class="admin-info" id="adminInfo"></div>
+        <button class="logout-btn" onclick="logout()">
+          <span>🚪</span>
+          <span>Вийти</span>
+        </button>
+      </div>
+    </aside>
+    
+    <!-- Mobile menu toggle -->
+    <button class="menu-toggle" onclick="toggleSidebar()">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    
+    <!-- Main content -->
+    <main class="main-content">
+      <div id="page-dashboard" class="page active">
+        <div class="page-header">
+          <h1>Дашборд</h1>
+          <p>Огляд активності бота</p>
+        </div>
+        <div class="stats-grid" id="statsGrid">
+          <div class="stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-info">
+              <h3 id="totalUsers">0</h3>
+              <p>Всього користувачів</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🟢</div>
+            <div class="stat-info">
+              <h3 id="activeUsers">0</h3>
+              <p>Активні за 24 год</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">💬</div>
+            <div class="stat-info">
+              <h3 id="totalMessages">0</h3>
+              <p>Всього повідомлень</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⚠️</div>
+            <div class="stat-info">
+              <h3 id="pendingReports">0</h3>
+              <p>Нові скарги</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🔒</div>
+            <div class="stat-info">
+              <h3 id="blockedUsers">0</h3>
+              <p>Заблоковано</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div id="page-chats" class="page">
+        <div class="page-header">
+          <h1>Чати</h1>
+          <p>Перегляд діалогів користувачів</p>
+        </div>
+        <div class="chats-container">
+          <div class="chats-list" id="chatsList">
+            <div class="loading">
+              <div class="spinner"></div>
+              <span>Завантаження чатів...</span>
+            </div>
+          </div>
+          <div class="chat-messages" id="chatMessages">
+            <div class="empty-chat">
+              <div class="empty-chat-icon">💬</div>
+              <p>Оберіть чат для перегляду</p>
+              <span>Натисніть на діалог зліва</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div id="page-users" class="page">
+        <div class="page-header">
+          <h1>Користувачі</h1>
+          <p>Управління користувачами бота</p>
+        </div>
+        <div class="users-table-container">
+          <div class="search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" id="userSearch" placeholder="Пошук за ID, іменем або username...">
+          </div>
+          <div class="users-list" id="usersList">
+            <div class="loading">
+              <div class="spinner"></div>
+              <span>Завантаження...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div id="page-reports" class="page">
+        <div class="page-header">
+          <h1>Скарги</h1>
+          <p>Модерація скарг від користувачів</p>
+        </div>
+        <div class="reports-list" id="reportsList">
+          <div class="loading">
+            <div class="spinner"></div>
+            <span>Завантаження...</span>
+          </div>
+        </div>
+      </div>
+      
+      <div id="page-admins" class="page">
+        <div class="page-header">
+          <h1>Адміністратори</h1>
+          <p>Управління доступом</p>
+        </div>
+        <div class="add-admin">
+          <h3>➕ Додати адміністратора</h3>
+          <div class="add-admin-form">
+            <input type="number" id="newAdminId" placeholder="Telegram ID">
+            <input type="text" id="newAdminName" placeholder="Ім'я (опціонально)">
+            <button onclick="addAdmin()">Додати</button>
+          </div>
+        </div>
+        <div class="admins-list" id="adminsList">
+          <div class="loading">
+            <div class="spinner"></div>
+            <span>Завантаження...</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  
+  <script src="/admin.js"></script>
+</body>
+</html>

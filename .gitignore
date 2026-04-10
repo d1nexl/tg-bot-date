@@ -1,0 +1,28 @@
+# Залежності
+node_modules/
+package-lock.json
+
+# Конфігураційні файли з секретами
+.env
+.env.local
+.env.production
+
+# Логи
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Тимчасові файли
+tmp/
+temp/
