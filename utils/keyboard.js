@@ -70,10 +70,23 @@ const settingsKeyboard = {
   }
 };
 
+// Головне меню для адмінів
+const adminMainMenuKeyboard = {
+  reply_markup: {
+    keyboard: [
+      ["🔍 Пошук користувача", "⚙️ Налаштування"],
+      ["📜 Правила", "📞 Підтримка", "🛡️ Адмін панель"]
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: false
+  }
+};
+
 module.exports = {
   whoToFindKeyboard,
   whoAreYouKeyboard,
   districtKeyboard,
   mainMenuKeyboard,
-  settingsKeyboard
+  settingsKeyboard,
+  adminMainMenuKeyboard
 };

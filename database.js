@@ -67,8 +67,40 @@ async function isAdmin(telegramId) {
   return admin !== null;
 }
 
+// Схема для каналів
+const channelSchema = new mongoose.Schema({
+  channelId: { type: String, unique: true, required: true }, // @username або ID
+  channelUrl: { type: String, required: true },
+  channelName: String,
+  isActive: { type: Boolean, default: true },
+  addedAt: { type: Date, default: Date.now },
+  addedBy: Number
+});
+
+// Схема для розсилок
+const broadcastSchema = new mongoose.Schema({
+  message: String,
+  sentBy: Number,
+  sentAt: { type: Date, default: Date.now },
+  totalSent: Number,
+  successful: Number,
+  failed: Number
+});
+
+// Схема для перевірки підписки
+const userSubscriptionSchema = new mongoose.Schema({
+  userId: { type: Number, required: true },
+  checkedAt: { type: Date, default: Date.now },
+  isSubscribed: { type: Boolean, default: false }
+});
+
+const Channel = mongoose.model('Channel', channelSchema);
+const Broadcast = mongoose.model('Broadcast', broadcastSchema);
+const UserSubscription = mongoose.model('UserSubscription', userSubscriptionSchema);
+
+
 const User = mongoose.model('User', userSchema);
 const Message = mongoose.model('Message', messageSchema);
 const Report = mongoose.model('Report', reportSchema);
 
-module.exports = { connectDB, User, Message, Report, Admin, isAdmin };
+module.exports = { connectDB, User, Message, Report, Admin, isAdmin, Channel, Broadcast, UserSubscription };
