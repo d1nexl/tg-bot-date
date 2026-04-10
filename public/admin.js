@@ -316,24 +316,9 @@ async function loadChatMessages(user1, user2, element) {
 
 // Оновлення заголовка чату (зменшений)
 function updateChatHeader() {
-  const chatMessagesContainer = document.getElementById('chatMessages');
-  const existingHeader = document.querySelector('.chat-header');
-  
-  if (existingHeader) existingHeader.remove();
-  
-  const header = document.createElement('div');
-  header.className = 'chat-header';
-  header.innerHTML = `
-    <div class="chat-header-avatars">
-      ${createAvatar(currentChatUsers.user1.name, currentChatUsers.user1.id)}
-      ${createAvatar(currentChatUsers.user2.name, currentChatUsers.user2.id)}
-    </div>
-    <div class="chat-header-info">
-      <h3>${escapeHtml(currentChatUsers.user1.name)} ↔ ${escapeHtml(currentChatUsers.user2.name)}</h3>
-    </div>
-  `;
-  
-  chatMessagesContainer.parentNode.insertBefore(header, chatMessagesContainer);
+  // Заголовок прибрано для економії місця
+  // Інформація про користувачів доступна при натисканні на аватарку
+  return;
 }
 
 // Завантаження користувачів
