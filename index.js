@@ -10,7 +10,7 @@ const ADMINS = process.env.ADMINS ? process.env.ADMINS.split(',').map(Number) : 
 // Тимчасове сховище
 const userStates = new Map();
 const activeChats = new Map();
-const waitingUsers = new Map(); // Черга користувачів, які чекають на співрозмовника
+const waitingUsers = new Map();
 
 const RULES_URL = process.env.RULES_URL || 'http://localhost:3000/rules';
 const SUPPORT_CONTACT = process.env.SUPPORT_CONTACT || '@тут_нік';
@@ -23,7 +23,26 @@ const { whoToFindKeyboard, whoAreYouKeyboard, districtKeyboard, mainMenuKeyboard
 connectDB();
 
 // Команда /start
-bot.onText(/\/start/, (msg) => startHandler(bot, msg));
+bot.onText(/\/start/, async (msg) => {
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  
+  // Завжди запускаємо процес заповнення анкети
+  // Користувач може оновити свої дані
+  startHandler(bot, msg);
+});
+
+// Команда для перевірки підписки
+bot.onText(/\/check/, async (msg) => {
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  
+  const isSubscribed = await requireSubscriptionWithButtons(userId, chatId, true, true);
+  
+  if (isSubscribed) {
+    await bot.sendMessage(chatId, "✅ Ви підписані на всі необхідні канали!");
+  }
+});
 
 // Команда для припинення пошуку
 bot.onText(/\/stopsearch/, async (msg) => {
@@ -37,90 +56,103 @@ bot.onText(/\/stopsearch/, async (msg) => {
 
 // Функція для оновлення головного меню
 async function updateMainMenu(chatId, userId) {
+  const user = await User.findOne({ telegramId: userId });
+
+  if (!user || !user.findGender || !user.userGender || !user.district) {
+    await bot.sendMessage(chatId, "📝 Спочатку заповніть анкету!");
+    startHandler(bot, { from: { id: userId }, chat: { id: chatId } });
+    return;
+  }
+
+  const isSubscribed = await requireSubscriptionWithButtons(userId, chatId, false);
+  if (!isSubscribed) {
+    await requireSubscriptionWithButtons(userId, chatId, true);
+    return;
+  }
+
   const isInChat = activeChats.has(userId);
   const isWaiting = waitingUsers.has(userId);
   const isAdmin = ADMINS.includes(userId);
-  
+
   let menuKeyboard;
+  let message;
+
   if (isInChat) {
-    menuKeyboard = [["🔍 Шукати іншого", "❌ Завершити чат"], ["📜 Правила", "📞 Підтримка"]];
+    menuKeyboard = [
+      ["❌ Завершити чат"],
+      ["🔍 Новий співрозмовник"],
+      ["⚠️ Скарга", "📞 Підтримка"]
+    ];
+    message = "💬 *Ви в чаті*\n\nОберіть дію:";
   } else if (isWaiting) {
-    menuKeyboard = [["⏹️ Припинити пошук"], ["⚙️ Налаштування", "📜 Правила", "📞 Підтримка"]];
+    menuKeyboard = [
+      ["⏹️ Зупинити пошук"],
+      ["⚙️ Анкета", "✅ Підписка"],
+      ["📜 Правила", "📞 Підтримка"]
+    ];
+    message = "🔍 *Пошук співрозмовника...*\n\nОчікуйте або зупиніть пошук:";
   } else {
-    menuKeyboard = [["🔍 Пошук користувача", "⚙️ Налаштування"], ["📜 Правила", "📞 Підтримка"]];
+    menuKeyboard = [
+      ["🔍 Знайти співрозмовника"],
+      ["⚙️ Анкета", "✅ Підписка"],
+      ["📜 Правила", "📞 Підтримка"]
+    ];
+
     if (isAdmin) {
-      menuKeyboard.push(["🛡️ Адмін панель"]);
+      menuKeyboard.push(["🛡️ Адмінка"]);
     }
+
+    message = "📋 *Головне меню*\n\nОберіть дію:";
   }
-  
-  const menuKeyboardObj = {
+
+  await bot.sendMessage(chatId, message, {
+    parse_mode: "Markdown",
     reply_markup: {
       keyboard: menuKeyboard,
       resize_keyboard: true,
       one_time_keyboard: false
     }
-  };
-  
-  try {
-    await bot.sendMessage(chatId, "📋 Головне меню:", menuKeyboardObj);
-  } catch (error) {
-    console.log('Помилка оновлення меню:', error.message);
-  }
+  });
 }
 
 bot.onText(/\/admin_panel/, async (msg) => {
-  const userId = msg.from.id;
+  await showAdminPanel(msg.chat.id, msg.from.id);
+});
+
+
+// Функція для відкриття адмін-панелі (єдина для команди та кнопки)
+async function showAdminPanel(chatId, userId) {
   if (!ADMINS.includes(userId)) {
-    await bot.sendMessage(userId, "❌ У вас немає доступу до адмін-панелі.");
-    return;
+    await bot.sendMessage(chatId, "❌ У вас немає доступу до адмін-панелі.");
+    return false;
   }
   
   const adminPanelKeyboard = {
-  reply_markup: {
-    inline_keyboard: [
-      [
-        { text: "📊 Статистика", callback_data: "admin_stats" },
-        { text: "📢 Розсилка", callback_data: "admin_broadcast" }
-      ],
-      [
-        { text: "👥 Користувачі", callback_data: "admin_users_menu" },
-        { text: "📺 Канали", callback_data: "admin_channels_menu" }
-      ],
-      [
-        { text: "⚠️ Скарги", callback_data: "admin_reports" },
-        { text: "🔒 Блокування", callback_data: "admin_blocks_menu" }
-      ],
-      [
-        { text: "🌐 Веб-адмінка", callback_data: "admin_website" },
-        { text: "❌ Закрити", callback_data: "cancel" }
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "📊 Статистика", callback_data: "admin_stats" },
+          { text: "📢 Розсилка", callback_data: "admin_broadcast" }
+        ],
+        [
+          { text: "👥 Користувачі", callback_data: "admin_users_menu" },
+          { text: "📺 Канали", callback_data: "admin_channels_menu" }
+        ],
+        [
+          { text: "⚠️ Скарги", callback_data: "admin_reports" },
+          { text: "🔒 Блокування", callback_data: "admin_blocks_menu" }
+        ],
+        [
+          { text: "🌐 Веб-адмінка", callback_data: "admin_website" },
+          { text: "❌ Закрити", callback_data: "cancel" }
+        ]
       ]
-    ]
-  }
-};
+    }
+  };
   
-  await bot.sendMessage(userId, "🛡️ **Адмін-панель бота**\n\nОберіть дію:", { parse_mode: "Markdown", ...adminPanelKeyboard });
-});
-
-bot.onText(/\/add_channel/, async (msg) => {
-  const userId = msg.from.id;
-  if (!ADMINS.includes(userId)) return;
-  
-  userStates.set(userId, { adminAction: 'add_channel' });
-  await bot.sendMessage(msg.chat.id, "Введіть інформацію про канал у форматі:\n`@username|Назва каналу|https://t.me/username`", { parse_mode: "Markdown" });
-});
-
-bot.onText(/\/remove_channel/, async (msg) => {
-  const userId = msg.from.id;
-  if (!ADMINS.includes(userId)) return;
-  
-  const channels = await Channel.find();
-  let message = "Введіть номер каналу для видалення:\n\n";
-  for (let i = 0; i < channels.length; i++) {
-    message += `${i+1}. ${channels[i].channelName || 'Канал'}: ${channels[i].channelUrl}\n`;
-  }
-  userStates.set(userId, { adminAction: 'remove_channel', channels: channels });
-  await bot.sendMessage(msg.chat.id, message);
-});
+  await bot.sendMessage(chatId, "🛡️ **Адмін-панель бота**\n\nОберіть дію:", { parse_mode: "Markdown", ...adminPanelKeyboard });
+  return true;
+}
 
 bot.onText(/\/users_count/, async (msg) => {
   if (!ADMINS.includes(msg.from.id)) return;
@@ -128,7 +160,6 @@ bot.onText(/\/users_count/, async (msg) => {
   const activeCount = await User.countDocuments({ isBlocked: false });
   await bot.sendMessage(msg.chat.id, `👥 Всього: ${count}\n🟢 Активних: ${activeCount}`);
 });
-
 
 // Команда для перевірки чи заблокований користувач
 async function isBlocked(userId) {
@@ -177,7 +208,6 @@ async function tryFindMatch(userId) {
   
   for (const waitingId of waitingList) {
     if (waitingId !== userId && !activeChats.has(waitingId)) {
-      // Знайшли пару
       waitingUsers.delete(waitingId);
       waitingUsers.delete(userId);
       await createChat(userId, waitingId);
@@ -202,7 +232,6 @@ async function createChat(user1Id, user2Id) {
   await bot.sendMessage(user1Id, chatStartMsg);
   await bot.sendMessage(user2Id, chatStartMsg);
   
-  // Кнопка для скарг для обох користувачів
   const reportKeyboard = {
     reply_markup: {
       inline_keyboard: [
@@ -214,7 +243,6 @@ async function createChat(user1Id, user2Id) {
   await bot.sendMessage(user1Id, "⚠️ Якщо співрозмовник порушує правила, натисніть кнопку нижче:", reportKeyboard);
   await bot.sendMessage(user2Id, "⚠️ Якщо співрозмовник порушує правила, натисніть кнопку нижче:", reportKeyboard);
   
-  // Оновлюємо меню для обох
   await updateMainMenu(user1Id, user1Id);
   await updateMainMenu(user2Id, user2Id);
   
@@ -288,39 +316,69 @@ async function updateUserProfile(userId, field, value, chatId) {
   }
 }
 
-// Функція перевірки підписки на канали
-async function checkUserSubscriptions(userId) {
+// Функція для перевірки підписки та відправки кнопок (БЕЗ КЕШУ)
+async function requireSubscriptionWithButtons(userId, chatId, showMessage = true, forceCheck = true) {
   const channels = await Channel.find({ isActive: true });
+  
   if (channels.length === 0) return true;
+  
+  // Для адмінів завжди повертаємо true
+  if (ADMINS.includes(userId)) return true;
+  
+  // Пряма перевірка без кешу
+  let isSubscribed = true;
+  const notSubscribedChannels = [];
   
   for (const channel of channels) {
     try {
       const chatMember = await bot.getChatMember(channel.channelId, userId);
       if (chatMember.status === 'left' || chatMember.status === 'kicked') {
-        return false;
+        isSubscribed = false;
+        notSubscribedChannels.push(channel);
       }
     } catch (error) {
-      console.error('Помилка перевірки підписки:', error);
-      return false;
+      console.log(`⚠️ Не вдалося перевірити канал ${channel.channelId}:`, error.message);
     }
   }
-  return true;
-}
-
-// Команда для перевірки підписки перед пошуком
-async function requireSubscription(userId, chatId) {
-  const isSubscribed = await checkUserSubscriptions(userId);
-  if (!isSubscribed) {
-    const channels = await Channel.find({ isActive: true });
-    let message = "❌ Для використання бота необхідно підписатися на наші канали:\n\n";
-    for (const channel of channels) {
-      message += `📢 ${channel.channelName || 'Канал'}: ${channel.channelUrl}\n`;
-    }
-    message += "\n✅ Після підписки натисніть /start";
-    await bot.sendMessage(chatId, message);
+  
+  if (!isSubscribed && showMessage && notSubscribedChannels.length > 0) {
+    await sendSubscriptionMessage(chatId, notSubscribedChannels);
     return false;
   }
-  return true;
+  
+  return isSubscribed;
+}
+
+// Допоміжна функція для відправки повідомлення про підписку
+async function sendSubscriptionMessage(chatId, notSubscribedChannels) {
+  const subscribeButtons = [];
+  for (const channel of notSubscribedChannels) {
+    subscribeButtons.push([
+      { text: `📢 Підписатись на ${channel.channelName || 'канал'}`, url: channel.channelUrl }
+    ]);
+  }
+  subscribeButtons.push([{ text: "✅ Я підписався", callback_data: "check_subscription" }]);
+  
+  const subscribeKeyboard = { reply_markup: { inline_keyboard: subscribeButtons } };
+  
+  let message = "❌ **Для використання бота необхідно підписатися на наші канали:**\n\n";
+  for (const channel of notSubscribedChannels) {
+    message += `📢 ${channel.channelName || 'Канал'}: ${channel.channelUrl}\n`;
+  }
+  message += "\n👇 Натисніть на кнопки нижче, щоб підписатися, а потім натисніть **'Я підписався'**";
+  
+  await bot.sendMessage(chatId, message, { parse_mode: "Markdown", ...subscribeKeyboard });
+}
+
+// Функція для перевірки чи бот є адміном каналу
+async function checkBotInChannel(channelId) {
+  try {
+    const botInfo = await bot.getMe();
+    const chatMember = await bot.getChatMember(channelId, botInfo.id);
+    return chatMember.status === 'administrator' || chatMember.status === 'creator';
+  } catch (error) {
+    return false;
+  }
 }
 
 // Обробка callback-запитів
@@ -330,7 +388,30 @@ bot.on('callback_query', async (callbackQuery) => {
   const data = callbackQuery.data;
   const messageId = callbackQuery.message.message_id;
   
-  // Якщо це скарга (без ID)
+  // ========== 1. ПІДПИСКА ==========
+  if (data === 'check_subscription') {
+    const isSubscribed = await requireSubscriptionWithButtons(userId, chatId, false);
+    if (isSubscribed) {
+      await bot.sendMessage(chatId, "✅ Дякуємо за підписку! Тепер ви можете користуватися ботом.");
+      await updateMainMenu(chatId, userId);
+    } else {
+      await requireSubscriptionWithButtons(userId, chatId, true);
+    }
+    await answerCallback(callbackQuery);
+    return;
+  }
+  
+  // ========== 2. ПЕРЕВІРКА ПІДПИСКИ ДЛЯ ВСІХ ІНШИХ ==========
+  if (!ADMINS.includes(userId)) {
+    const isSubscribed = await requireSubscriptionWithButtons(userId, chatId, false);
+    if (!isSubscribed) {
+      await requireSubscriptionWithButtons(userId, chatId, true);
+      await answerCallback(callbackQuery);
+      return;
+    }
+  }
+  
+  // ========== 3. СКАРГИ ==========
   if (data === 'report') {
     const partnerId = activeChats.get(userId);
     if (!partnerId) {
@@ -371,7 +452,6 @@ bot.on('callback_query', async (callbackQuery) => {
     
     await bot.sendMessage(chatId, "✅ Скаргу відправлено адміністратору. Дякуємо за допомогу!");
     
-    // Повідомити адмінів
     for (const adminId of ADMINS) {
       await bot.sendMessage(adminId, `⚠️ Нова скарга!\nВід: ${userId}\nНа: ${reportedId}\nПричина: ${reason}`);
     }
@@ -380,7 +460,7 @@ bot.on('callback_query', async (callbackQuery) => {
     return;
   }
   
-  // Якщо це налаштування
+  // ========== 4. НАЛАШТУВАННЯ ==========
   if (data === 'settings') {
     try {
       await bot.editMessageText(
@@ -439,7 +519,7 @@ bot.on('callback_query', async (callbackQuery) => {
     return;
   }
   
-  // Крок 1: Вибрали кого шукати
+  // ========== 5. РЕЄСТРАЦІЯ ==========
   if (data.startsWith('find_')) {
     const state = userStates.get(userId);
     if (state && state.editing === 'findGender') {
@@ -468,7 +548,6 @@ bot.on('callback_query', async (callbackQuery) => {
     await answerCallback(callbackQuery);
   }
   
-  // Крок 2: Вибрали хто ти
   else if (data.startsWith('iam_')) {
     const state = userStates.get(userId);
     if (state && state.editing === 'userGender') {
@@ -497,7 +576,6 @@ bot.on('callback_query', async (callbackQuery) => {
     await answerCallback(callbackQuery);
   }
   
-  // Крок 3: Вибрали район
   else if (data.startsWith('dist_')) {
     const state = userStates.get(userId);
     if (state && state.editing === 'district') {
@@ -526,34 +604,37 @@ bot.on('callback_query', async (callbackQuery) => {
       }
       
       try {
-        const existingUser = await User.findOne({ telegramId: userId });
-        if (!existingUser) {
-          const newUser = new User({
-            telegramId: userId,
-            username: callbackQuery.from.username,
-            firstName: callbackQuery.from.first_name,
-            lastName: callbackQuery.from.last_name,
-            findGender: newState.findGender,
-            userGender: newState.userGender,
-            district: newState.district
-          });
-          await newUser.save();
-          console.log(`✅ Користувача ${userId} збережено в БД`);
-        } else {
-          await User.updateOne(
-            { telegramId: userId },
-            { 
-              findGender: newState.findGender,
-              userGender: newState.userGender,
-              district: newState.district,
-              lastActive: new Date()
-            }
-          );
-          console.log(`✅ Дані користувача ${userId} оновлено`);
-        }
-      } catch (dbError) {
-        console.error('Помилка БД:', dbError.message);
-      }
+  const existingUser = await User.findOne({ telegramId: userId });
+  
+  const userData = {
+    username: callbackQuery.from.username,
+    firstName: callbackQuery.from.first_name,
+    lastName: callbackQuery.from.last_name,
+    findGender: newState.findGender,
+    userGender: newState.userGender,
+    district: newState.district,
+    lastActive: new Date()
+  };
+  
+  if (!existingUser) {
+    // Створюємо нового користувача
+    const newUser = new User({
+      telegramId: userId,
+      ...userData
+    });
+    await newUser.save();
+    console.log(`✅ Нового користувача ${userId} збережено в БД`);
+  } else {
+    // Оновлюємо існуючого користувача
+    await User.updateOne(
+      { telegramId: userId },
+      { ...userData }
+    );
+    console.log(`✅ Дані користувача ${userId} оновлено`);
+  }
+} catch (dbError) {
+  console.error('Помилка БД:', dbError.message);
+}
       
       try {
         await bot.editMessageText(
@@ -568,15 +649,8 @@ bot.on('callback_query', async (callbackQuery) => {
     }
     await answerCallback(callbackQuery);
   }
-
-  const isSubscribed = await requireSubscription(userId, chatId);
-if (!isSubscribed) {
-  await answerCallback(callbackQuery);
-  return;
-}
-
   
-  // Обробка пошуку
+  // ========== 6. ПОШУК ==========
   else if (data === 'search') {
     const user = await User.findOne({ telegramId: userId });
     
@@ -598,12 +672,10 @@ if (!isSubscribed) {
       return;
     }
     
-    // Додаємо в чергу
     waitingUsers.set(userId, true);
     await bot.sendMessage(chatId, "🔍 Шукаємо співрозмовника... Очікуйте. Натисніть '⏹️ Припинити пошук' щоб скасувати.");
     await updateMainMenu(chatId, userId);
     
-    // Спроба знайти пару
     const found = await tryFindMatch(userId);
     
     if (!found) {
@@ -613,20 +685,26 @@ if (!isSubscribed) {
     await answerCallback(callbackQuery);
   }
   
+  // ========== 7. ІНШЕ ==========
   else if (data === 'cancel') {
     await bot.sendMessage(chatId, "❌ Скасовано");
     await updateMainMenu(chatId, userId);
     await answerCallback(callbackQuery);
   }
+  
   else if (data === 'rules') {
     await bot.sendMessage(chatId, `📜 Правила знайомств: ${RULES_URL}`);
     await answerCallback(callbackQuery);
-}
-else if (data === 'support') {
+  }
+  
+  else if (data === 'support') {
     await bot.sendMessage(chatId, `📞 Підтримка: ${SUPPORT_CONTACT}`);
     await answerCallback(callbackQuery);
-}
-  // Адмін-команди
+  }
+  
+  // ========== 8. АДМІН-КОМАНДИ ==========
+  
+  // Статистика
   else if (data === 'admin_stats') {
     if (!ADMINS.includes(userId)) return;
     
@@ -636,6 +714,7 @@ else if (data === 'support') {
     const totalReports = await Report.countDocuments({ status: 'pending' });
     const blockedUsers = await User.countDocuments({ isBlocked: true });
     const waitingCount = waitingUsers.size;
+    const activeChatsCount = activeChats.size / 2;
     
     const statsText = `📊 **Статистика бота**\n\n` +
       `👥 Всього користувачів: ${totalUsers}\n` +
@@ -643,301 +722,533 @@ else if (data === 'support') {
       `💬 Всього повідомлень: ${totalMessages}\n` +
       `⚠️ Нові скарги: ${totalReports}\n` +
       `🔒 Заблоковано: ${blockedUsers}\n` +
-      `⏳ В черзі пошуку: ${waitingCount}`;
+      `⏳ В черзі пошуку: ${waitingCount}\n` +
+      `💬 Активних чатів: ${activeChatsCount}`;
     
-    await bot.sendMessage(chatId, statsText, { parse_mode: "Markdown" });
-    await answerCallback(callbackQuery);
-  }
-  // ... решта адмін-команд залишаються без змін
-  else if (data === 'admin_messages') {
-    if (!ADMINS.includes(userId)) return;
-    
-    const lastMessages = await Message.find().sort({ timestamp: -1 }).limit(20);
-    
-    if (lastMessages.length === 0) {
-      await bot.sendMessage(chatId, "📭 Немає повідомлень.");
-      await answerCallback(callbackQuery);
-      return;
-    }
-    
-    let messagesText = "💬 **Останні 20 повідомлень:**\n\n";
-    for (const msg of lastMessages) {
-      messagesText += `👤 ${msg.fromName} (${msg.fromUserId}) → ${msg.toName} (${msg.toUserId})\n`;
-      messagesText += `📝 ${msg.text?.substring(0, 100)}${msg.text?.length > 100 ? '...' : ''}\n`;
-      messagesText += `🕐 ${msg.timestamp.toLocaleString()}\n`;
-      messagesText += `---\n`;
-    }
-    
-    if (messagesText.length > 4000) {
-      for (let i = 0; i < lastMessages.length; i += 10) {
-        const chunk = lastMessages.slice(i, i + 10);
-        let chunkText = "💬 **Повідомлення:**\n\n";
-        for (const msg of chunk) {
-          chunkText += `👤 ${msg.fromName} (${msg.fromUserId}) → ${msg.toName}\n📝 ${msg.text?.substring(0, 100)}\n🕐 ${msg.timestamp.toLocaleString()}\n---\n`;
-        }
-        await bot.sendMessage(chatId, chunkText, { parse_mode: "Markdown" });
+    const keyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🔙 Назад", callback_data: "admin_panel" }]
+        ]
       }
+    };
+    
+    await bot.editMessageText(
+      statsText,
+      { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
+    );
+    await answerCallback(callbackQuery);
+  }
+  
+  // ========== МЕНЮ БЛОКУВАННЯ (НОВЕ) ==========
+  else if (data === 'admin_blocks_menu') {
+    if (!ADMINS.includes(userId)) return;
+    
+    const keyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🔒 Заблокувати користувача", callback_data: "admin_block" }],
+          [{ text: "🔓 Розблокувати користувача", callback_data: "admin_unblock" }],
+          [{ text: "📋 Список заблокованих", callback_data: "admin_blocked_list" }],
+          [{ text: "🔙 Назад", callback_data: "admin_panel" }]
+        ]
+      }
+    };
+    
+    await bot.editMessageText(
+      "🔒 **Управління блокуваннями**\n\nОберіть дію:",
+      { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
+    );
+    await answerCallback(callbackQuery);
+  }
+  
+  // ========== МЕНЮ КОРИСТУВАЧІВ ==========
+  else if (data === 'admin_users_menu') {
+    if (!ADMINS.includes(userId)) return;
+    
+    const totalUsers = await User.countDocuments();
+    const activeUsers = await User.countDocuments({ lastActive: { $gt: new Date(Date.now() - 24*60*60*1000) } });
+    
+    const keyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📋 Список всіх користувачів", callback_data: "admin_users_list" }],
+          [{ text: "🟢 Активні користувачі", callback_data: "admin_active_users" }],
+          [{ text: "📊 Статистика", callback_data: "admin_stats" }],
+          [{ text: "🔙 Назад", callback_data: "admin_panel" }]
+        ]
+      }
+    };
+    
+    await bot.editMessageText(
+      `👥 **Управління користувачами**\n\n` +
+      `📊 Всього користувачів: ${totalUsers}\n` +
+      `🟢 Активних за 24 год: ${activeUsers}\n\n` +
+      `Оберіть дію:`,
+      { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
+    );
+    await answerCallback(callbackQuery);
+  }
+  
+  // ========== СПИСОК ВСІХ КОРИСТУВАЧІВ ==========
+  else if (data === 'admin_users_list') {
+    if (!ADMINS.includes(userId)) return;
+    
+    const users = await User.find({}).limit(50).sort({ createdAt: -1 });
+    
+    if (users.length === 0) {
+      await bot.editMessageText(
+        "📭 Немає користувачів.",
+        { chat_id: chatId, message_id: messageId }
+      );
     } else {
-      await bot.sendMessage(chatId, messagesText, { parse_mode: "Markdown" });
-    }
-    await answerCallback(callbackQuery);
-  }
-  else if (data === 'admin_users') {
-    if (!ADMINS.includes(userId)) return;
-    
-    const users = await User.find().sort({ createdAt: -1 }).limit(30);
-    
-    let usersText = "👥 **Останні 30 користувачів:**\n\n";
-    for (const user of users) {
-      usersText += `🆔 ${user.telegramId}\n`;
-      usersText += `📛 ${user.firstName || 'Немає'} ${user.lastName || ''}\n`;
-      usersText += `@${user.username || 'немає'}\n`;
-      usersText += `🎭 ${user.userGender === 'iam_boy' ? 'Хлопець' : 'Дівчина'} → шукає ${user.findGender === 'find_boys' ? 'хлопців' : user.findGender === 'find_girls' ? 'дівчат' : 'всіх'}\n`;
-      usersText += `📍 Район: ${user.district?.replace('dist_', '') || 'не вибрано'}\n`;
-      usersText += `🔒 ${user.isBlocked ? 'Заблокований' : 'Активний'}\n`;
-      usersText += `📅 ${user.createdAt.toLocaleDateString()}\n`;
-      usersText += `---\n`;
-    }
-    
-    await bot.sendMessage(chatId, usersText, { parse_mode: "Markdown" });
-    await answerCallback(callbackQuery);
-  }
-  else if (data === 'admin_reports') {
-    if (!ADMINS.includes(userId)) return;
-    
-    const reports = await Report.find({ status: 'pending' }).sort({ timestamp: -1 });
-    
-    if (reports.length === 0) {
-      await bot.sendMessage(chatId, "✅ Немає нових скарг.");
-      await answerCallback(callbackQuery);
-      return;
-    }
-    
-    for (const report of reports.slice(0, 5)) {
-      const reportText = `⚠️ **Скарга #${report._id}**\n\n` +
-        `👤 Від: ${report.reporterId}\n` +
-        `👤 На: ${report.reportedId}\n` +
-        `📝 Причина: ${report.reason || 'Не вказана'}\n` +
-        `🕐 ${report.timestamp.toLocaleString()}`;
+      let list = "📋 **Список користувачів (останні 50):**\n\n";
+      users.forEach((user, index) => {
+        list += `${index + 1}. ID: ${user.telegramId} | ${user.firstName || 'Без імені'} ${user.isBlocked ? '🔒' : '✅'}\n`;
+      });
       
-      await bot.sendMessage(chatId, reportText, { parse_mode: "Markdown" });
+      const keyboard = {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Назад", callback_data: "admin_users_menu" }]
+          ]
+        }
+      };
+      
+      await bot.editMessageText(
+        list,
+        { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
+      );
     }
     await answerCallback(callbackQuery);
   }
+  
+  // ========== АКТИВНІ КОРИСТУВАЧІ ==========
+  else if (data === 'admin_active_users') {
+    if (!ADMINS.includes(userId)) return;
+    
+    const users = await User.find({ 
+      lastActive: { $gt: new Date(Date.now() - 24*60*60*1000) },
+      isBlocked: false
+    }).limit(50);
+    
+    if (users.length === 0) {
+      await bot.editMessageText(
+        "📭 Немає активних користувачів за останню добу.",
+        { chat_id: chatId, message_id: messageId }
+      );
+    } else {
+      let list = "🟢 **Активні користувачі (останні 24 год):**\n\n";
+      users.forEach((user, index) => {
+        list += `${index + 1}. ID: ${user.telegramId} | ${user.firstName || 'Без імені'}\n`;
+      });
+      
+      const keyboard = {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Назад", callback_data: "admin_users_menu" }]
+          ]
+        }
+      };
+      
+      await bot.editMessageText(
+        list,
+        { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
+      );
+    }
+    await answerCallback(callbackQuery);
+  }
+  
+  // ========== БЛОКУВАННЯ КОРИСТУВАЧА ==========
   else if (data === 'admin_block') {
     if (!ADMINS.includes(userId)) return;
     
-    await bot.sendMessage(chatId, "Введіть ID користувача для блокування:", { reply_markup: { force_reply: true } });
+    await bot.editMessageText(
+      "🔒 **Блокування користувача**\n\nВведіть Telegram ID користувача, якого потрібно заблокувати:",
+      { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
+    );
     userStates.set(userId, { adminAction: 'block' });
     await answerCallback(callbackQuery);
   }
+  
+  // ========== РОЗБЛОКУВАННЯ КОРИСТУВАЧА ==========
   else if (data === 'admin_unblock') {
     if (!ADMINS.includes(userId)) return;
     
-    await bot.sendMessage(chatId, "Введіть ID користувача для розблокування:", { reply_markup: { force_reply: true } });
+    await bot.editMessageText(
+      "🔓 **Розблокування користувача**\n\nВведіть Telegram ID користувача, якого потрібно розблокувати:",
+      { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
+    );
     userStates.set(userId, { adminAction: 'unblock' });
     await answerCallback(callbackQuery);
   }
-
+  
+  // ========== СПИСОК ЗАБЛОКОВАНИХ ==========
+  else if (data === 'admin_blocked_list') {
+    if (!ADMINS.includes(userId)) return;
+    
+    const blockedUsers = await User.find({ isBlocked: true }).limit(50);
+    
+    if (blockedUsers.length === 0) {
+      const keyboard = {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Назад", callback_data: "admin_blocks_menu" }]
+          ]
+        }
+      };
+      await bot.editMessageText(
+        "🔓 Немає заблокованих користувачів.",
+        { chat_id: chatId, message_id: messageId, ...keyboard }
+      );
+    } else {
+      let list = "🔒 **Список заблокованих користувачів:**\n\n";
+      const blockButtons = [];
+      
+      blockedUsers.forEach((user, index) => {
+        list += `${index + 1}. ID: ${user.telegramId} | ${user.firstName || 'Без імені'}\n`;
+        blockButtons.push([{ text: `🔓 Розблокувати ${user.telegramId}`, callback_data: `admin_unblock_user_${user.telegramId}` }]);
+      });
+      
+      blockButtons.push([{ text: "🔙 Назад", callback_data: "admin_blocks_menu" }]);
+      
+      const keyboard = { reply_markup: { inline_keyboard: blockButtons } };
+      
+      await bot.editMessageText(
+        list,
+        { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
+      );
+    }
+    await answerCallback(callbackQuery);
+  }
+  
+  // ========== РОЗБЛОКУВАННЯ ЗІ СПИСКУ ==========
+  else if (data.startsWith('admin_unblock_user_')) {
+    if (!ADMINS.includes(userId)) return;
+    
+    const targetId = parseInt(data.replace('admin_unblock_user_', ''));
+    await User.updateOne({ telegramId: targetId }, { isBlocked: false });
+    await bot.sendMessage(chatId, `✅ Користувача ${targetId} розблоковано.`);
+    try {
+      await bot.sendMessage(targetId, "✅ Ваш акаунт розблоковано.");
+    } catch (e) {}
+    await answerCallback(callbackQuery, "Користувача розблоковано");
+  }
+  
+  // ========== СКАРГИ ==========
+  else if (data === 'admin_reports') {
+    if (!ADMINS.includes(userId)) return;
+    
+    const reports = await Report.find({ status: 'pending' }).sort({ timestamp: -1 }).limit(20);
+    
+    if (reports.length === 0) {
+      const keyboard = {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Назад", callback_data: "admin_panel" }]
+          ]
+        }
+      };
+      await bot.editMessageText(
+        "✅ Немає нових скарг.",
+        { chat_id: chatId, message_id: messageId, ...keyboard }
+      );
+    } else {
+      let reportsText = "⚠️ **Нові скарги:**\n\n";
+      const reportButtons = [];
+      
+      for (const report of reports) {
+        reportsText += `📌 Скарга #${report._id.toString().slice(-6)}\n`;
+        reportsText += `👤 Від: ${report.reporterId}\n`;
+        reportsText += `👤 На: ${report.reportedId}\n`;
+        reportsText += `📝 Причина: ${report.reason}\n`;
+        reportsText += `🕒 ${new Date(report.timestamp).toLocaleString()}\n\n`;
+        
+        reportButtons.push([
+          { text: `✅ Прийняти #${report._id.toString().slice(-6)}`, callback_data: `admin_accept_report_${report._id}` },
+          { text: `❌ Відхилити #${report._id.toString().slice(-6)}`, callback_data: `admin_reject_report_${report._id}` }
+        ]);
+      }
+      
+      reportButtons.push([{ text: "🔙 Назад", callback_data: "admin_panel" }]);
+      
+      const keyboard = { reply_markup: { inline_keyboard: reportButtons } };
+      
+      try {
+        await bot.editMessageText(
+          reportsText,
+          { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
+        );
+      } catch (error) {
+        await bot.sendMessage(chatId, reportsText, { parse_mode: "Markdown", ...keyboard });
+      }
+    }
+    await answerCallback(callbackQuery);
+  }
+  
+  // ========== ПРИЙНЯТТЯ СКАРГИ ==========
+  else if (data.startsWith('admin_accept_report_')) {
+    if (!ADMINS.includes(userId)) return;
+    
+    const reportId = data.replace('admin_accept_report_', '');
+    const report = await Report.findById(reportId);
+    
+    if (report) {
+      await User.updateOne({ telegramId: report.reportedId }, { isBlocked: true });
+      report.status = 'resolved';
+      report.resolvedBy = userId;
+      report.resolvedAt = new Date();
+      await report.save();
+      
+      await bot.sendMessage(chatId, `✅ Скаргу прийнято. Користувача ${report.reportedId} заблоковано.`);
+      
+      try {
+        await bot.sendMessage(report.reportedId, "❌ Ваш акаунт заблоковано адміністратором за скаргу.");
+      } catch (e) {}
+    }
+    
+    await answerCallback(callbackQuery, "Скаргу оброблено");
+  }
+  
+  // ========== ВІДХИЛЕННЯ СКАРГИ ==========
+  else if (data.startsWith('admin_reject_report_')) {
+    if (!ADMINS.includes(userId)) return;
+    
+    const reportId = data.replace('admin_reject_report_', '');
+    const report = await Report.findById(reportId);
+    
+    if (report) {
+      report.status = 'rejected';
+      report.resolvedBy = userId;
+      report.resolvedAt = new Date();
+      await report.save();
+      
+      await bot.sendMessage(chatId, `❌ Скаргу відхилено.`);
+    }
+    
+    await answerCallback(callbackQuery, "Скаргу відхилено");
+  }
+  
+  // ========== РОЗСИЛКА ==========
   else if (data === 'admin_broadcast') {
-  if (!ADMINS.includes(userId)) return;
-  userStates.set(userId, { adminAction: 'broadcast' });
-  await bot.sendMessage(chatId, "📢 Введіть текст для розсилки всім користувачам:");
-  await answerCallback(callbackQuery);
-}
-
-else if (data === 'admin_channels') {
-  if (!ADMINS.includes(userId)) return;
-  const channels = await Channel.find();
-  let message = "📺 **Керування каналами**\n\n";
-  
-  if (channels.length === 0) {
-    message += "Немає доданих каналів.\n";
-  } else {
-    for (let i = 0; i < channels.length; i++) {
-      message += `${i+1}. ${channels[i].channelName || 'Канал'}: ${channels[i].channelUrl}\n`;
-      message += `   Статус: ${channels[i].isActive ? '✅ Активний' : '❌ Неактивний'}\n`;
-    }
+    if (!ADMINS.includes(userId)) return;
+    
+    await bot.editMessageText(
+      "📢 **Розсилка повідомлень**\n\nВведіть текст для розсилки всім користувачам:",
+      { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
+    );
+    userStates.set(userId, { adminAction: 'broadcast' });
+    await answerCallback(callbackQuery);
   }
   
-  message += "\nДії:\n/add_channel - додати канал\n/remove_channel - видалити канал";
-  
-  await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-  await answerCallback(callbackQuery);
-}
-
-else if (data === 'admin_website') {
-  if (!ADMINS.includes(userId)) return;
-  
-  const websiteUrl = RULES_URL.replace('/rules', '/admin');
-  
-  // Markdown посилання - Telegram відкриває при натисканні
-  await bot.sendMessage(chatId, `🌐 **Адмін-панель сайту**\n\n👉 [Відкрити адмін-панель](${websiteUrl})\n\nАбо скопіюйте посилання:\n\`${websiteUrl}\``, { parse_mode: "Markdown" });
-  await answerCallback(callbackQuery);
-}
-
-else if (data === 'admin_blocks') {
-  if (!ADMINS.includes(userId)) return;
-  const blockedUsers = await User.find({ isBlocked: true }).limit(20);
-  let message = "🔒 **Заблоковані користувачі:**\n\n";
-  
-  if (blockedUsers.length === 0) {
-    message += "Немає заблокованих користувачів.";
-  } else {
-    for (const user of blockedUsers) {
-      message += `🆔 ${user.telegramId} - ${user.firstName || 'Користувач'}\n`;
-    }
-  }
-  
-  message += "\nЩоб розблокувати: /unblock ID";
-  await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-  await answerCallback(callbackQuery);
-}
-
-// Додай обробку для розсилки
-else if (data === 'admin_broadcast_confirm') {
-  if (!ADMINS.includes(userId)) return;
-  const state = userStates.get(userId);
-  if (state && state.broadcastMessage) {
-    await bot.sendMessage(chatId, "📢 Починаю розсилку... Це може зайняти деякий час.");
+  // ========== ПІДТВЕРДЖЕННЯ РОЗСИЛКИ ==========
+  else if (data === 'admin_broadcast_confirm') {
+    if (!ADMINS.includes(userId)) return;
     
-    const users = await User.find({ isBlocked: false });
-    console.log(`📊 Знайдено користувачів для розсилки: ${users.length}`);
-    
-    if (users.length === 0) {
-      await bot.sendMessage(chatId, "❌ Немає активних користувачів для розсилки.");
-      userStates.delete(userId);
-      await answerCallback(callbackQuery);
+    const state = userStates.get(userId);
+    if (!state || !state.broadcastMessage) {
+      await bot.sendMessage(chatId, "❌ Немає тексту для розсилки.");
       return;
     }
     
-    let successful = 0;
+    const message = state.broadcastMessage;
+    const users = await User.find({ isBlocked: false });
+    let sent = 0;
     let failed = 0;
+    
+    await bot.sendMessage(chatId, `📢 Починаю розсилку для ${users.length} користувачів...`);
     
     for (const user of users) {
       try {
-        await bot.sendMessage(user.telegramId, `📢 **Розсилка від адміністрації**\n\n${state.broadcastMessage}`, { parse_mode: "Markdown" });
-        successful++;
-        console.log(`✅ Відправлено ${user.telegramId}`);
+        await bot.sendMessage(user.telegramId, message);
+        sent++;
       } catch (error) {
         failed++;
-        console.log(`❌ Помилка відправки ${user.telegramId}:`, error.message);
       }
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     
-    const broadcast = new Broadcast({
-      message: state.broadcastMessage,
-      sentBy: userId,
-      totalSent: users.length,
-      successful: successful,
-      failed: failed
-    });
-    await broadcast.save();
-    
-    await bot.sendMessage(chatId, `✅ **Розсилку завершено!**\n\n📨 Відправлено: ${successful}\n❌ Не доставлено: ${failed}\n👥 Всього користувачів: ${users.length}`, { parse_mode: "Markdown" });
+    await bot.sendMessage(chatId, `✅ Розсилку завершено!\n📨 Відправлено: ${sent}\n❌ Помилок: ${failed}`);
     userStates.delete(userId);
-  }
-  await answerCallback(callbackQuery);
-}
-
-else if (data === 'admin_panel') {
-  if (!ADMINS.includes(userId)) {
-    await bot.sendMessage(chatId, "❌ У вас немає доступу до адмін-панелі.");
     await answerCallback(callbackQuery);
-    return;
   }
   
-  const adminPanelKeyboard = {
-  reply_markup: {
-    inline_keyboard: [
-      [
-        { text: "📊 Статистика", callback_data: "admin_stats" },
-        { text: "📢 Розсилка", callback_data: "admin_broadcast" }
-      ],
-      [
-        { text: "👥 Користувачі", callback_data: "admin_users_menu" },
-        { text: "📺 Канали", callback_data: "admin_channels_menu" }
-      ],
-      [
-        { text: "⚠️ Скарги", callback_data: "admin_reports" },
-        { text: "🔒 Блокування", callback_data: "admin_blocks_menu" }
-      ],
-      [
-        { text: "🌐 Веб-адмінка", callback_data: "admin_website" },
-        { text: "❌ Закрити", callback_data: "cancel" }
-      ]
-    ]
+  // ========== УПРАВЛІННЯ КАНАЛАМИ ==========
+  else if (data === 'admin_channels_menu') {
+    if (!ADMINS.includes(userId)) return;
+    
+    const channels = await Channel.find({});
+    
+    let channelsText = "📺 **Управління каналами**\n\n";
+    if (channels.length === 0) {
+      channelsText += "📭 Немає доданих каналів.\n\n";
+    } else {
+      channelsText += "**Додані канали:**\n";
+      channels.forEach((ch, i) => {
+        channelsText += `${i + 1}. ${ch.channelName || ch.channelId}\n`;
+      });
+      channelsText += "\n";
+    }
+    
+    const keyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "➕ Додати канал", callback_data: "admin_add_channel" }],
+          [{ text: "➖ Видалити канал", callback_data: "admin_remove_channel" }],
+          [{ text: "🔙 Назад", callback_data: "admin_panel" }]
+        ]
+      }
+    };
+    
+    await bot.editMessageText(
+      channelsText,
+      { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
+    );
+    await answerCallback(callbackQuery);
   }
-};
   
-  await bot.sendMessage(chatId, "🛡️ **Адмін-панель бота**\n\nОберіть дію:", { parse_mode: "Markdown", ...adminPanelKeyboard });
-  await answerCallback(callbackQuery);
-}
-
-else if (data === 'admin_users_menu') {
-  const usersMenuKeyboard = {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "👥 Список користувачів", callback_data: "admin_users" }],
-        [{ text: "🔍 Пошук користувача", callback_data: "admin_search_user" }],
-        [{ text: "📊 Статистика користувачів", callback_data: "admin_users_stats" }],
-        [{ text: "🔙 Назад", callback_data: "admin_panel" }]
-      ]
+  // ========== ДОДАВАННЯ КАНАЛУ ==========
+  else if (data === 'admin_add_channel') {
+    if (!ADMINS.includes(userId)) return;
+    
+    await bot.editMessageText(
+      "➕ **Додавання каналу**\n\n" +
+      "Введіть username або посилання на канал:\n" +
+      "Наприклад: `@channel_name` або `https://t.me/channel_name`\n\n" +
+      "⚠️ **Важливо:** Бот повинен бути адміністратором каналу!",
+      { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
+    );
+    userStates.set(userId, { adminAction: 'add_channel' });
+    await answerCallback(callbackQuery);
+  }
+  
+  // ========== ВИДАЛЕННЯ КАНАЛУ (меню) ==========
+  else if (data === 'admin_remove_channel') {
+    if (!ADMINS.includes(userId)) return;
+    
+    const channels = await Channel.find({});
+    
+    if (channels.length === 0) {
+      await bot.editMessageText(
+        "❌ Немає каналів для видалення.",
+        { chat_id: chatId, message_id: messageId }
+      );
+    } else {
+      let message = "➖ **Виберіть канал для видалення:**\n\n";
+      const buttons = [];
+      
+      channels.forEach((ch, i) => {
+        message += `${i + 1}. ${ch.channelName || ch.channelId}\n`;
+        buttons.push([{ text: `❌ ${ch.channelName || ch.channelId}`, callback_data: `admin_delete_channel_${ch._id}` }]);
+      });
+      
+      buttons.push([{ text: "🔙 Назад", callback_data: "admin_channels_menu" }]);
+      
+      const keyboard = { reply_markup: { inline_keyboard: buttons } };
+      
+      await bot.editMessageText(
+        message,
+        { chat_id: chatId, message_id: messageId, ...keyboard }
+      );
     }
-  };
-  await bot.sendMessage(chatId, "👥 **Керування користувачами**\n\nОберіть дію:", { parse_mode: "Markdown", ...usersMenuKeyboard });
-  await answerCallback(callbackQuery);
-}
-
-else if (data === 'admin_channels_menu') {
-  const channelsMenuKeyboard = {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "📺 Список каналів", callback_data: "admin_channels" }],
-        [{ text: "➕ Додати канал", callback_data: "admin_add_channel" }],
-        [{ text: "❌ Видалити канал", callback_data: "admin_remove_channel" }],
-        [{ text: "🔙 Назад", callback_data: "admin_panel" }]
-      ]
+    await answerCallback(callbackQuery);
+  }
+  
+  // ========== ВИДАЛЕННЯ КАНАЛУ (конкретний) ==========
+  else if (data.startsWith('admin_delete_channel_')) {
+    if (!ADMINS.includes(userId)) return;
+    
+    const channelId = data.replace('admin_delete_channel_', '');
+    await Channel.deleteOne({ _id: channelId });
+    await bot.sendMessage(chatId, "✅ Канал видалено!");
+    await answerCallback(callbackQuery);
+  }
+  
+  // ========== ВЕБ-АДМІНКА ==========
+   else if (data === 'admin_website') {
+    if (!ADMINS.includes(userId)) return;
+    
+    // Telegram вимагає HTTPS для URL кнопок
+    let webUrl = process.env.WEBAPP_URL || 'https://your-domain.com/admin';
+    
+    // Якщо URL починається з http:// - це не працюватиме в Telegram
+    if (webUrl.startsWith('http://')) {
+      const keyboard = {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔙 Назад", callback_data: "admin_panel" }]
+          ]
+        }
+      };
+      
+      await bot.editMessageText(
+        "🌐 **Веб-адмінка**\n\n" +
+        "⚠️ Веб-адмінка доступна тільки через HTTPS.\n\n" +
+        "🔗 Скопіюйте та вставте посилання в браузер:\n" +
+        `\`${webUrl}\`\n\n` +
+        "💡 **Порада:** Для роботи веб-адмінки потрібен публічний HTTPS-домен (наприклад, через ngrok або VPS).",
+        { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
+      );
+    } else {
+      const keyboard = {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🌐 Відкрити веб-адмінку", url: webUrl }],
+            [{ text: "🔙 Назад", callback_data: "admin_panel" }]
+          ]
+        }
+      };
+      
+      await bot.editMessageText(
+        "🌐 **Веб-адмінка**\n\nНатисніть кнопку нижче, щоб відкрити веб-інтерфейс адміністратора:",
+        { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
+      );
     }
-  };
-  await bot.sendMessage(chatId, "📺 **Керування каналами**\n\nОберіть дію:", { parse_mode: "Markdown", ...channelsMenuKeyboard });
-  await answerCallback(callbackQuery);
-}
-
-else if (data === 'admin_blocks_menu') {
-  const blocksMenuKeyboard = {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🔒 Заблоковані користувачі", callback_data: "admin_blocks" }],
-        [{ text: "🔒 Блокувати користувача", callback_data: "admin_block" }],
-        [{ text: "🔓 Розблокувати", callback_data: "admin_unblock" }],
-        [{ text: "🔙 Назад", callback_data: "admin_panel" }]
-      ]
-    }
-  };
-  await bot.sendMessage(chatId, "🔒 **Керування блокуваннями**\n\nОберіть дію:", { parse_mode: "Markdown", ...blocksMenuKeyboard });
-  await answerCallback(callbackQuery);
-}
-
-
+    await answerCallback(callbackQuery);
+  }
+  
+  // ========== ПОВЕРНЕННЯ В АДМІН-ПАНЕЛЬ ==========
+  else if (data === 'admin_panel') {
+    if (!ADMINS.includes(userId)) return;
+    await showAdminPanel(chatId, userId);
+    await answerCallback(callbackQuery);
+  }
 });
 
+// Обробка текстових повідомлень
 // Обробка текстових повідомлень
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   const text = msg.text;
+
+  // Перевірка підписки для всіх текстових повідомлень (крім /start)
+  const isSubscribed = await requireSubscriptionWithButtons(userId, chatId, false);
+  if (!isSubscribed && text !== '/start') {
+    await requireSubscriptionWithButtons(userId, chatId, true);
+    return;
+  }
   
   if (text && text.startsWith('/')) return;
   
-  // Кнопки завершення чату/пошуку
-  if (text === '❌ Завершити чат' || text === '⏹️ Припинити пошук') {
+  // ========== КНОПКИ ДЛЯ ВСІХ СТАНІВ ==========
+  
+  // Кнопка перевірки підписки (стара версія для сумісності)
+  if (text === '✅ Перевірити підписку') {
+    const isSubscribed = await requireSubscriptionWithButtons(userId, chatId, true, true);
+    if (isSubscribed) {
+      await bot.sendMessage(chatId, "✅ Ви підписані на всі необхідні канали!");
+    }
+    return;
+  }
+  
+  // ========== КНОПКИ ДЛЯ СТАНУ "В ЧАТІ" ==========
+  if (text === '❌ Завершити чат') {
     await endChat(userId, chatId);
     return;
   }
   
-  if (text === '🔍 Шукати іншого') {
+  if (text === '🔍 Новий співрозмовник') {
     await endChat(userId, chatId);
     bot.emit('callback_query', {
       id: Date.now(),
@@ -948,11 +1259,87 @@ bot.on('message', async (msg) => {
     return;
   }
   
-  // Перевіряємо чи в активному чаті
+  if (text === '⚠️ Скарга') {
+    const partnerId = activeChats.get(userId);
+    if (!partnerId) {
+      await bot.sendMessage(chatId, "❌ Немає активного чату для скарги.");
+      return;
+    }
+    
+    const reportKeyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "💬 Спам", callback_data: `report_reason_spam_${partnerId}` }],
+          [{ text: "🔞 Неприйнятна поведінка", callback_data: `report_reason_behavior_${partnerId}` }],
+          [{ text: "💰 Шахрайство", callback_data: `report_reason_scam_${partnerId}` }],
+          [{ text: "❌ Інше", callback_data: `report_reason_other_${partnerId}` }]
+        ]
+      }
+    };
+    
+    await bot.sendMessage(chatId, "⚠️ **Поскаржитись на співрозмовника**\n\nОберіть причину скарги:", { parse_mode: "Markdown", ...reportKeyboard });
+    return;
+  }
+  
+  // ========== КНОПКИ ДЛЯ СТАНУ "ПОШУК" ==========
+  if (text === '⏹️ Зупинити пошук') {
+    await endChat(userId, chatId);
+    return;
+  }
+  
+  // ========== КНОПКИ ГОЛОВНОГО МЕНЮ ==========
+  if (text === '🔍 Знайти співрозмовника') {
+    const isSubscribed = await requireSubscriptionWithButtons(userId, chatId, true, true);
+    if (!isSubscribed) return;
+    
+    const user = await User.findOne({ telegramId: userId });
+    if (!user) {
+      bot.sendMessage(chatId, "❌ Спочатку пройдіть реєстрацію через /start");
+    } else if (waitingUsers.has(userId)) {
+      bot.sendMessage(chatId, "🔍 Ви вже в черзі пошуку!");
+    } else {
+      bot.emit('callback_query', {
+        id: Date.now(),
+        from: msg.from,
+        message: { chat: { id: chatId } },
+        data: 'search'
+      });
+    }
+    return;
+  }
+  
+  if (text === '⚙️ Анкета') {
+    await bot.sendMessage(chatId, "⚙️ **Налаштування анкети**\n\nОберіть що хочете змінити:", { parse_mode: "Markdown", ...settingsKeyboard });
+    return;
+  }
+  
+  if (text === '✅ Підписка') {
+    const isSubscribed = await requireSubscriptionWithButtons(userId, chatId, true, true);
+    if (isSubscribed) {
+      await bot.sendMessage(chatId, "✅ Ви підписані на всі необхідні канали!");
+    }
+    return;
+  }
+  
+  if (text === '📜 Правила') {
+    bot.sendMessage(chatId, `📜 Правила знайомств\n\n${RULES_URL}`);
+    return;
+  }
+  
+  if (text === '📞 Підтримка') {
+    bot.sendMessage(chatId, `📞 Підтримка\n\nЗв'язатись з адміністратором: ${SUPPORT_CONTACT}`);
+    return;
+  }
+  
+  if (text === '🛡️ Адмінка') {
+    await showAdminPanel(chatId, userId);
+    return;
+  }
+  
+  // ========== ПЕРЕВІРКА ЧИ В АКТИВНОМУ ЧАТІ (для звичайних повідомлень) ==========
   if (activeChats.has(userId)) {
     const partnerId = activeChats.get(userId);
     
-    // ЗБЕРІГАЄМО ПОВІДОМЛЕННЯ В БД
     try {
       const fromUser = await User.findOne({ telegramId: userId });
       const toUser = await User.findOne({ telegramId: partnerId });
@@ -972,7 +1359,6 @@ bot.on('message', async (msg) => {
       console.error('Помилка збереження повідомлення:', error);
     }
     
-    // Перевіряємо чи не заблокований користувач
     if (await isBlocked(userId)) {
       await bot.sendMessage(chatId, "❌ Ви заблоковані адміністратором.");
       await endChat(userId, chatId);
@@ -985,7 +1371,6 @@ bot.on('message', async (msg) => {
       return;
     }
     
-    // Відправляємо повідомлення
     try {
       await bot.sendMessage(partnerId, `${text}`);
     } catch (error) {
@@ -996,51 +1381,15 @@ bot.on('message', async (msg) => {
     return;
   }
   
-  // Обробка кнопок меню (коли не в чаті)
-  if (text === '🔍 Пошук користувача') {
-    const user = await User.findOne({ telegramId: userId });
-    if (!user) {
-      bot.sendMessage(chatId, "❌ Спочатку пройдіть реєстрацію через /start");
-    } else if (waitingUsers.has(userId)) {
-      bot.sendMessage(chatId, "🔍 Ви вже в черзі пошуку!");
-    } else {
-      bot.emit('callback_query', {
-        id: Date.now(),
-        from: msg.from,
-        message: { chat: { id: chatId } },
-        data: 'search'
-      });
-    }
-  }
-  else if (text === '⚙️ Налаштування') {
-    await bot.sendMessage(chatId, "⚙️ **Налаштування анкети**\n\nОберіть що хочете змінити:", { parse_mode: "Markdown", ...settingsKeyboard });
-  }
-  else if (text === '📜 Правила') {
-    bot.sendMessage(chatId, `📜 Правила: ${RULES_URL}`);
-}
-else if (text === '📞 Підтримка') {
-    bot.sendMessage(chatId, `📞 Підтримка: ${SUPPORT_CONTACT}`);
-}
-
-else if (text === '🛡️ Адмін панель') {
-  bot.emit('callback_query', {
-    id: Date.now(),
-    from: msg.from,
-    message: { chat: { id: chatId } },
-    data: 'admin_panel'
-  });
-}
-  
-  // АДМІН-ДІЇ
+  // ========== АДМІН-ДІЇ ==========
   const state = userStates.get(userId);
+  
   if (state && state.adminAction === 'block') {
     const targetId = parseInt(text);
     if (targetId && !isNaN(targetId)) {
       await User.updateOne({ telegramId: targetId }, { isBlocked: true });
       await bot.sendMessage(chatId, `✅ Користувача ${targetId} заблоковано.`);
-      // Видаляємо з черги якщо був
       if (waitingUsers.has(targetId)) waitingUsers.delete(targetId);
-      // Завершуємо чат якщо був
       if (activeChats.has(targetId)) await endChat(targetId, targetId);
       try {
         await bot.sendMessage(targetId, "❌ Ваш акаунт заблоковано адміністратором.");
@@ -1051,7 +1400,7 @@ else if (text === '🛡️ Адмін панель') {
     userStates.delete(userId);
     return;
   }
-
+  
   if (state && state.adminAction === 'unblock') {
     const targetId = parseInt(text);
     if (targetId && !isNaN(targetId)) {
@@ -1066,53 +1415,156 @@ else if (text === '🛡️ Адмін панель') {
     userStates.delete(userId);
     return;
   }
-
-  // Розсилка
-if (state && state.adminAction === 'broadcast') {
-  const confirmKeyboard = {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "✅ Підтвердити", callback_data: "admin_broadcast_confirm" }],
-        [{ text: "❌ Скасувати", callback_data: "cancel" }]
-      ]
+  
+  if (state && state.adminAction === 'broadcast') {
+    const confirmKeyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "✅ Підтвердити", callback_data: "admin_broadcast_confirm" }],
+          [{ text: "❌ Скасувати", callback_data: "cancel" }]
+        ]
+      }
+    };
+    userStates.set(userId, { adminAction: null, broadcastMessage: text });
+    await bot.sendMessage(chatId, `📢 Текст розсилки:\n\n${text}\n\nНадіслати?`, confirmKeyboard);
+    return;
+  }
+  
+  if (state && state.adminAction === 'add_channel') {
+    let username = text.trim();
+    
+    if (username.includes('t.me/')) {
+      const match = username.match(/t\.me\/([a-zA-Z0-9_]+)/);
+      if (match) {
+        username = '@' + match[1];
+      } else {
+        await bot.sendMessage(chatId, "❌ Невірний формат посилання. Використовуйте: `@username` або `https://t.me/username`", { parse_mode: "Markdown" });
+        userStates.delete(userId);
+        return;
+      }
     }
-  };
-  userStates.set(userId, { adminAction: null, broadcastMessage: text });
-  await bot.sendMessage(chatId, `📢 Текст розсилки:\n\n${text}\n\nНадіслати?`, confirmKeyboard);
-  return;
-}
-
-// Додавання каналу
-if (state && state.adminAction === 'add_channel') {
-  const parts = text.split('|');
-  if (parts.length >= 2) {
-    const channel = new Channel({
-      channelId: parts[0].trim(),
-      channelUrl: parts[2]?.trim() || `https://t.me/${parts[0].trim().replace('@', '')}`,
-      channelName: parts[1].trim(),
-      addedBy: userId
-    });
-    await channel.save();
-    await bot.sendMessage(chatId, `✅ Канал "${channel.channelName}" додано!`);
-  } else {
-    await bot.sendMessage(chatId, "❌ Невірний формат. Використовуйте: `@username|Назва|https://t.me/username`", { parse_mode: "Markdown" });
+    
+    if (!username.startsWith('@')) {
+      username = '@' + username;
+    }
+    
+    try {
+      const chat = await bot.getChat(username);
+      
+      if (chat.type !== 'channel') {
+        await bot.sendMessage(chatId, "❌ Це не канал. Бот працює тільки з публічними каналами.");
+        userStates.delete(userId);
+        return;
+      }
+      
+      const botInfo = await bot.getMe();
+      let isAdmin = false;
+      let hasPermissions = false;
+      
+      try {
+        const chatMember = await bot.getChatMember(username, botInfo.id);
+        if (chatMember.status === 'administrator' || chatMember.status === 'creator') {
+          isAdmin = true;
+          hasPermissions = chatMember.can_invite_users || chatMember.can_manage_chat;
+        }
+      } catch (error) {
+        console.log('Помилка перевірки прав бота:', error.message);
+      }
+      
+      if (!isAdmin) {
+        await bot.sendMessage(chatId, 
+          `❌ **Помилка!**\n\n` +
+          `Бот не є адміністратором каналу **${chat.title}**.\n\n` +
+          `❗ **Щоб бот міг перевіряти підписки, він повинен бути адміністратором каналу.**\n\n` +
+          `🔧 **Інструкція:**\n` +
+          `1️⃣ Додайте бота @${botInfo.username} в канал\n` +
+          `2️⃣ Зробіть бота адміністратором\n` +
+          `3️⃣ Дайте права на запрошення користувачів\n` +
+          `4️⃣ Спробуйте додати канал знову`,
+          { parse_mode: "Markdown" }
+        );
+        
+        const openChannelKeyboard = {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: `📢 Відкрити канал ${chat.title}`, url: `https://t.me/${username.replace('@', '')}` }]
+            ]
+          }
+        };
+        await bot.sendMessage(chatId, `🔗 Посилання на канал: https://t.me/${username.replace('@', '')}`, openChannelKeyboard);
+        userStates.delete(userId);
+        return;
+      }
+      
+      if (!hasPermissions) {
+        await bot.sendMessage(chatId,
+          `⚠️ **Увага!**\n\n` +
+          `Бот є адміністратором каналу **${chat.title}**, але не має прав для перевірки учасників.\n\n` +
+          `🔧 Надайте боту права: **'Invite Users'** або **'Manage Chat'** для коректної роботи.`,
+          { parse_mode: "Markdown" }
+        );
+      }
+      
+      const existingChannel = await Channel.findOne({ channelId: username });
+      if (existingChannel) {
+        await bot.sendMessage(chatId, `❌ Канал **${chat.title}** вже додано!`, { parse_mode: "Markdown" });
+        userStates.delete(userId);
+        return;
+      }
+      
+      const channel = new Channel({
+        channelId: username,
+        channelUrl: `https://t.me/${username.replace('@', '')}`,
+        channelUsername: username,
+        channelName: chat.title,
+        addedBy: userId
+      });
+      await channel.save();
+      
+      await bot.sendMessage(chatId, 
+        `✅ **Канал додано!**\n\n` +
+        `📢 Назва: ${chat.title}\n` +
+        `🔗 Посилання: https://t.me/${username.replace('@', '')}\n` +
+        `👤 Username: ${username}\n\n` +
+        `✅ Бот є адміністратором - перевірка підписки працюватиме!`,
+        { parse_mode: "Markdown" }
+      );
+      
+    } catch (error) {
+      console.error('Помилка додавання каналу:', error);
+      
+      if (error.response?.body?.description?.includes('chat not found')) {
+        await bot.sendMessage(chatId,
+          `❌ **Канал не знайдено!**\n\n` +
+          `Канал з username "${username}" не існує або є приватним.\n\n` +
+          `Переконайтеся, що канал публічний (має username) та введено правильно.`,
+          { parse_mode: "Markdown" }
+        );
+      } else {
+        await bot.sendMessage(chatId,
+          `❌ **Помилка при додаванні каналу!**\n\n` +
+          `Помилка: ${error.message}`,
+          { parse_mode: "Markdown" }
+        );
+      }
+      userStates.delete(userId);
+      return;
+    }
+    userStates.delete(userId);
+    return;
   }
-  userStates.delete(userId);
-  return;
-}
-
-// Видалення каналу
-if (state && state.adminAction === 'remove_channel') {
-  const index = parseInt(text) - 1;
-  if (state.channels && state.channels[index]) {
-    await Channel.deleteOne({ _id: state.channels[index]._id });
-    await bot.sendMessage(chatId, "✅ Канал видалено!");
-  } else {
-    await bot.sendMessage(chatId, "❌ Невірний номер каналу.");
+  
+  if (state && state.adminAction === 'remove_channel') {
+    const index = parseInt(text) - 1;
+    if (state.channels && state.channels[index]) {
+      await Channel.deleteOne({ _id: state.channels[index]._id });
+      await bot.sendMessage(chatId, "✅ Канал видалено!");
+    } else {
+      await bot.sendMessage(chatId, "❌ Невірний номер каналу.");
+    }
+    userStates.delete(userId);
+    return;
   }
-  userStates.delete(userId);
-  return;
-}
 });
 
 console.log('🤖 Бот запущено!');

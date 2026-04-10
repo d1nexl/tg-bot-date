@@ -72,6 +72,7 @@ const channelSchema = new mongoose.Schema({
   channelId: { type: String, unique: true, required: true }, // @username або ID
   channelUrl: { type: String, required: true },
   channelName: String,
+  channelUsername: String, // @username для кнопки підписки
   isActive: { type: Boolean, default: true },
   addedAt: { type: Date, default: Date.now },
   addedBy: Number

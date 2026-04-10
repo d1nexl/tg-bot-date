@@ -1,12 +1,18 @@
 const { whoToFindKeyboard } = require('../utils/keyboard');
 
-module.exports = (bot, msg) => {
+module.exports = async (bot, msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(
+  const userId = msg.from.id;
+  
+  // Зберігаємо стан для нового користувача або скидаємо старий
+  if (!global.userStates) global.userStates = new Map();
+  global.userStates.set(userId, { step: 'who_to_find' });
+  
+  await bot.sendMessage(
     chatId,
-    "👋 Вітаю в боті знайомств Закарпаття!\n\n" +
-    "Давай спочатку налаштуємо твій профіль.\n\n" +
-    "👉 **Оберіть кого хочете шукати:**",
+    "👋 **Ласкаво просимо до бота знайомств Закарпаття!**\n\n" +
+    "📝 **Заповніть вашу анкету:**\n\n" +
+    "👇 **Кого ви хочете шукати?**",
     { parse_mode: "Markdown", ...whoToFindKeyboard }
   );
 };

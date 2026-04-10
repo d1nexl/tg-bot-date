@@ -4,7 +4,9 @@ const whoToFindKeyboard = {
     inline_keyboard: [
       [
         { text: "👨 Хлопців", callback_data: "find_boys" },
-        { text: "👩 Дівчат", callback_data: "find_girls" },
+        { text: "👩 Дівчат", callback_data: "find_girls" }
+      ],
+      [
         { text: "👥 Всіх підряд", callback_data: "find_all" }
       ]
     ]
@@ -46,18 +48,6 @@ const districtKeyboard = {
   }
 };
 
-// Головне меню (після налаштувань)
-const mainMenuKeyboard = {
-  reply_markup: {
-    keyboard: [
-      ["🔍 Пошук користувача", "❌ Відміна"],
-      ["📜 Правила", "📞 Підтримка"]
-    ],
-    resize_keyboard: true,
-    one_time_keyboard: false
-  }
-};
-
 // Клавіатура налаштувань
 const settingsKeyboard = {
   reply_markup: {
@@ -70,23 +60,10 @@ const settingsKeyboard = {
   }
 };
 
-// Головне меню для адмінів
-const adminMainMenuKeyboard = {
-  reply_markup: {
-    keyboard: [
-      ["🔍 Пошук користувача", "⚙️ Налаштування"],
-      ["📜 Правила", "📞 Підтримка", "🛡️ Адмін панель"]
-    ],
-    resize_keyboard: true,
-    one_time_keyboard: false
-  }
-};
 
 module.exports = {
   whoToFindKeyboard,
   whoAreYouKeyboard,
   districtKeyboard,
-  mainMenuKeyboard,
   settingsKeyboard,
-  adminMainMenuKeyboard
 };
