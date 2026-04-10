@@ -12,6 +12,9 @@ const userStates = new Map();
 const activeChats = new Map();
 const waitingUsers = new Map(); // Черга користувачів, які чекають на співрозмовника
 
+const RULES_URL = process.env.RULES_URL || 'http://localhost:3000/rules';
+const SUPPORT_CONTACT = process.env.SUPPORT_CONTACT || '@тут_нік';
+
 // Імпорт кнопок
 const startHandler = require('./handlers/start.js');
 const { whoToFindKeyboard, whoAreYouKeyboard, districtKeyboard, mainMenuKeyboard, settingsKeyboard } = require('./utils/keyboard.js');
@@ -532,13 +535,13 @@ bot.on('callback_query', async (callbackQuery) => {
     await answerCallback(callbackQuery);
   }
   else if (data === 'rules') {
-    await bot.sendMessage(chatId, "📜 Правила знайомств: http://localhost:3000/rules");
+    await bot.sendMessage(chatId, `📜 Правила знайомств: ${RULES_URL}`);
     await answerCallback(callbackQuery);
-  }
-  else if (data === 'support') {
-    await bot.sendMessage(chatId, "📞 Підтримка: @тут_нік");
+}
+else if (data === 'support') {
+    await bot.sendMessage(chatId, `📞 Підтримка: ${SUPPORT_CONTACT}`);
     await answerCallback(callbackQuery);
-  }
+}
   // Адмін-команди
   else if (data === 'admin_stats') {
     if (!ADMINS.includes(userId)) return;
@@ -746,11 +749,11 @@ bot.on('message', async (msg) => {
     await bot.sendMessage(chatId, "⚙️ **Налаштування анкети**\n\nОберіть що хочете змінити:", { parse_mode: "Markdown", ...settingsKeyboard });
   }
   else if (text === '📜 Правила') {
-    bot.sendMessage(chatId, "📜 Правила: http://localhost:3000/rules");
-  }
-  else if (text === '📞 Підтримка') {
-    bot.sendMessage(chatId, "📞 Підтримка: @тут_нік");
-  }
+    bot.sendMessage(chatId, `📜 Правила: ${RULES_URL}`);
+}
+else if (text === '📞 Підтримка') {
+    bot.sendMessage(chatId, `📞 Підтримка: ${SUPPORT_CONTACT}`);
+}
   
   // АДМІН-ДІЇ
   const state = userStates.get(userId);

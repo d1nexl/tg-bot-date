@@ -245,7 +245,11 @@ app.post('/api/add-admin', checkAdmin, async (req, res) => {
 // Перевірка пароля адміна
 app.post('/api/check-password', (req, res) => {
   const { password } = req.body;
-  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  const adminPassword = process.env.ADMIN_PASSWORD;
+if (!adminPassword) {
+  console.error('❌ ADMIN_PASSWORD не встановлено в .env');
+  process.exit(1);
+}
   
   if (password === adminPassword) {
     res.json({ success: true });
