@@ -22,7 +22,10 @@ const userSchema = new mongoose.Schema({
   isBlocked: { type: Boolean, default: false },
   reportCount: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
-  lastActive: { type: Date, default: Date.now }
+  lastActive: { type: Date, default: Date.now },
+  isSearching: { type: Boolean, default: false },
+searchStartedAt: { type: Date, default: null },
+isInChat: { type: Boolean, default: false }
 });
 
 // Схема для повідомлень

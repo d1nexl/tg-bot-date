@@ -1181,6 +1181,26 @@ body {
   background: #dbeafe;
 }
 
+.search-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.search-status.searching {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.search-status.idle {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar {

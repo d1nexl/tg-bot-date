@@ -57,6 +57,20 @@ async function checkAuth() {
   }
 }
 
+function formatFullDateTime(timestamp) {
+  if (!timestamp) return '—';
+
+  const date = new Date(timestamp);
+  return date.toLocaleString('uk-UA', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
 function renderMessageContent(message) {
   const type = message.messageType || 'text';
   const mediaUrl = `/api/message-file/${message._id}?adminId=${encodeURIComponent(currentAdminId)}`;
@@ -227,12 +241,24 @@ async function showUserInfo(userId, userName) {
           </div>
           <div class="user-info-row">
             <span class="user-info-label">🟢 Остання активність:</span>
-            <span class="user-info-value">${formatTime(user.lastActive)}</span>
+            <span class="user-info-value">${formatFullDateTime(user.lastActive)}</span>
           </div>
           <div class="user-info-row">
             <span class="user-info-label">🔒 Статус:</span>
             <span class="user-info-value ${user.isBlocked ? 'blocked-text' : 'active-text'}">${user.isBlocked ? 'Заблокований' : 'Активний'}</span>
           </div>
+          <div class="user-info-row">
+  <span class="user-info-label">🔍 Зараз у пошуку:</span>
+  <span class="user-info-value">${user.isSearching ? 'Так' : 'Ні'}</span>
+</div>
+<div class="user-info-row">
+  <span class="user-info-label">💬 Зараз у чаті:</span>
+  <span class="user-info-value">${user.isInChat ? 'Так' : 'Ні'}</span>
+</div>
+<div class="user-info-row">
+  <span class="user-info-label">🕓 Пошук з:</span>
+  <span class="user-info-value">${user.searchStartedAt ? formatFullDateTime(user.searchStartedAt) : '—'}</span>
+</div>
         </div>
         <div class="user-modal-footer">
   <a
@@ -450,38 +476,62 @@ async function loadUsers() {
     container.innerHTML = `
       <table class="users-table">
         <thead>
-          <tr><th>Аватар</th><th>ID</th><th>Ім'я</th><th>Username</th><th>Шукає</th><th>Стать</th><th>Район</th><th>Статус</th><th>Дії</th></tr>
+          <tr>
+  <th>Аватар</th>
+  <th>ID</th>
+  <th>Ім'я</th>
+  <th>Username</th>
+  <th>Шукає</th>
+  <th>Стать</th>
+  <th>Район</th>
+  <th>Онлайн статус</th>
+  <th>Пошук</th>
+  <th>Остання активність</th>
+  <th>Дії</th>
+</tr>
         </thead>
         <tbody>
           ${users.map(user => `
-            <tr>
-              <td class="user-avatar-cell">${createAvatar(user.firstName || user.telegramId, user.telegramId)}</td>
-              <td>${renderTelegramLink(user, String(user.telegramId))}</td>
-<td>
-  ${renderTelegramLink(
-    user,
-    `${user.firstName || '-'} ${user.lastName || ''}`.trim()
-  )}
-</td>
-<td>
-  ${
-    user.username
-      ? renderTelegramLink(user, `@${user.username}`)
-      : `<span class="muted-text">немає</span>`
-  }
-</td>
-              <td>${user.findGender === 'find_boys' ? 'Хлопців' : user.findGender === 'find_girls' ? 'Дівчат' : 'Всіх'}</td>
-              <td>${user.userGender === 'iam_boy' ? 'Хлопець' : 'Дівчина'}</td>
-              <td>${user.district?.replace('dist_', '') || '-'}</td>
-              <td><span class="user-status ${user.isBlocked ? 'blocked' : 'active'}">${user.isBlocked ? 'Заблокований' : 'Активний'}</span></td>
-              <td>
-                ${!user.isBlocked ? 
-                  `<button class="block-btn" onclick="blockUser(${user.telegramId})">🔒 Блокувати</button>` : 
-                  `<button class="unblock-btn" onclick="unblockUser(${user.telegramId})">🔓 Розблокувати</button>`
-                }
-              </td>
-            </tr>
-          `).join('')}
+  <tr>
+    <td class="user-avatar-cell">${createAvatar(user.firstName || user.telegramId, user.telegramId)}</td>
+    <td>${renderTelegramLink(user, String(user.telegramId))}</td>
+    <td>
+      ${renderTelegramLink(
+        user,
+        `${user.firstName || '-'} ${user.lastName || ''}`.trim()
+      )}
+    </td>
+    <td>
+      ${
+        user.username
+          ? renderTelegramLink(user, `@${user.username}`)
+          : `<span class="muted-text">немає</span>`
+      }
+    </td>
+    <td>${user.findGender === 'find_boys' ? 'Хлопців' : user.findGender === 'find_girls' ? 'Дівчат' : 'Всіх'}</td>
+    <td>${user.userGender === 'iam_boy' ? 'Хлопець' : 'Дівчина'}</td>
+    <td>${user.district?.replace('dist_', '') || '-'}</td>
+    <td>
+      <span class="user-status ${user.isBlocked ? 'blocked' : 'active'}">
+        ${user.isBlocked ? 'Заблокований' : (user.isInChat ? 'У чаті' : 'Активний')}
+      </span>
+    </td>
+    <td>
+      ${
+        user.isSearching
+          ? `<span class="search-status searching">🔍 Шукає</span>`
+          : `<span class="search-status idle">—</span>`
+      }
+    </td>
+    <td>${formatFullDateTime(user.lastActive)}</td>
+    <td>
+      ${!user.isBlocked ? 
+        `<button class="block-btn" onclick="blockUser(${user.telegramId})">🔒 Блокувати</button>` : 
+        `<button class="unblock-btn" onclick="unblockUser(${user.telegramId})">🔓 Розблокувати</button>`
+      }
+    </td>
+  </tr>
+`).join('')}
         </tbody>
        </table>
     `;

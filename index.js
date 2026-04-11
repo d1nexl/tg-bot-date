@@ -19,7 +19,44 @@ const startHandler = require('./handlers/start.js');
 const { whoToFindKeyboard, whoAreYouKeyboard, districtKeyboard, settingsKeyboard } = require('./utils/keyboard.js');
 
 // Підключення до БД
-connectDB();
+async function initApp() {
+  try {
+    await connectDB();
+
+    await User.updateMany(
+      {},
+      {
+        $set: {
+          isSearching: false,
+          isInChat: false,
+          searchStartedAt: null
+        }
+      }
+    );
+
+    console.log('✅ Статуси пошуку та чатів скинуто після запуску');
+  } catch (error) {
+    console.error('❌ Помилка ініціалізації:', error.message);
+  }
+}
+
+initApp();
+
+async function touchUserActivity(userId, extra = {}) {
+  try {
+    await User.updateOne(
+      { telegramId: userId },
+      {
+        $set: {
+          lastActive: new Date(),
+          ...extra
+        }
+      }
+    );
+  } catch (error) {
+    console.error('Помилка оновлення lastActive:', error.message);
+  }
+}
 
 // Функції перевірки прав (ТІЛЬКИ через БД)
 async function isAdminCheck(userId) {
@@ -36,24 +73,33 @@ async function isSuperAdminCheck(userId) {
 bot.onText(/\/start/, async (msg) => {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
+
+  await touchUserActivity(userId);
+
   startHandler(bot, msg);
 });
 
-// Команда для перевірки підписки
 bot.onText(/\/check/, async (msg) => {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
-  
+
+  await touchUserActivity(userId);
+
   const isSubscribed = await requireSubscriptionWithButtons(userId, chatId, true, true);
-  
+
   if (isSubscribed) {
     await bot.sendMessage(chatId, "✅ Ви підписані на всі необхідні канали!");
   }
 });
 
-// Команда для припинення пошуку
 bot.onText(/\/stopsearch/, async (msg) => {
   const userId = msg.from.id;
+
+  await touchUserActivity(userId, {
+    isSearching: false,
+    searchStartedAt: null
+  });
+
   if (waitingUsers.has(userId)) {
     waitingUsers.delete(userId);
     await bot.sendMessage(msg.chat.id, "🔍 Пошук припинено. Ви в головному меню:");
@@ -207,6 +253,18 @@ async function createChat(user1Id, user2Id) {
   
   activeChats.set(user1Id, user2Id);
   activeChats.set(user2Id, user1Id);
+
+  await touchUserActivity(user1Id, {
+  isSearching: false,
+  searchStartedAt: null,
+  isInChat: true
+});
+
+await touchUserActivity(user2Id, {
+  isSearching: false,
+  searchStartedAt: null,
+  isInChat: true
+});
   
   const chatStartMsg = `💬 Чат розпочато!\n\n🔒 Ви спілкуєтесь АНОНІМНО\n❌ Імена та нікнейми приховані\n\n❗ Щоб завершити чат, натисніть кнопку "❌ Завершити чат"\n💡 Не діліться особистою інформацією!`;
   
@@ -236,6 +294,12 @@ async function endChat(userId, chatId) {
     const partnerId = activeChats.get(userId);
     activeChats.delete(userId);
     activeChats.delete(partnerId);
+
+    await touchUserActivity(userId, { isInChat: false });
+
+if (partnerId) {
+  await touchUserActivity(partnerId, { isInChat: false });
+}
     
     await bot.sendMessage(chatId, "❌ Чат завершено.");
     if (partnerId) {
@@ -244,10 +308,16 @@ async function endChat(userId, chatId) {
     }
     await updateMainMenu(chatId, userId);
   } else if (waitingUsers.has(userId)) {
-    waitingUsers.delete(userId);
-    await bot.sendMessage(chatId, "🔍 Пошук припинено.");
-    await updateMainMenu(chatId, userId);
-  } else {
+  waitingUsers.delete(userId);
+
+  await touchUserActivity(userId, {
+    isSearching: false,
+    searchStartedAt: null
+  });
+
+  await bot.sendMessage(chatId, "🔍 Пошук припинено.");
+  await updateMainMenu(chatId, userId);
+} else {
     await bot.sendMessage(chatId, "❌ У вас немає активного чату.");
   }
 }
@@ -355,6 +425,7 @@ async function sendSubscriptionMessage(chatId, notSubscribedChannels) {
 bot.on('callback_query', async (callbackQuery) => {
   const chatId = callbackQuery.message.chat.id;
   const userId = callbackQuery.from.id;
+  await touchUserActivity(userId);
   const data = callbackQuery.data;
   const messageId = callbackQuery.message.message_id;
   
@@ -649,6 +720,12 @@ bot.on('callback_query', async (callbackQuery) => {
     }
     
     waitingUsers.set(userId, true);
+
+await touchUserActivity(userId, {
+  isSearching: true,
+  searchStartedAt: new Date(),
+  isInChat: false
+});
     await bot.sendMessage(chatId, "🔍 Шукаємо співрозмовника... Очікуйте. Натисніть '⏹️ Припинити пошук' щоб скасувати.");
     await updateMainMenu(chatId, userId);
     
@@ -1414,9 +1491,11 @@ bot.on('callback_query', async (callbackQuery) => {
 
 // Обробка текстових повідомлень
 bot.on('message', async (msg) => {
+  await touchUserActivity(msg.from.id);
+
   const chatId = msg.chat.id;
   const userId = msg.from.id;
-  const text = msg.text;
+  const text = msg.text || '';
 
   const isUserAdmin = await isAdminCheck(userId);
   
@@ -1546,6 +1625,7 @@ bot.on('message', async (msg) => {
   
   // ПЕРЕВІРКА ЧИ В АКТИВНОМУ ЧАТІ
   if (activeChats.has(userId)) {
+    await touchUserActivity(userId, { isInChat: true });
   const partnerId = activeChats.get(userId);
 
   try {
