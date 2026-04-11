@@ -794,7 +794,7 @@ bot.on('callback_query', async (callbackQuery) => {
         await bot.sendMessage(chatId, "📭 Немає користувачів.");
       }
     } else {
-      let list = "📋 **Список користувачів (останні 50):**\n\n";
+      let list = "📋 Список користувачів (останні 50):\n\n";
       users.forEach((user, index) => {
         list += `${index + 1}. ID: ${user.telegramId} | ${user.firstName || 'Без імені'} ${user.isBlocked ? '🔒' : '✅'}\n`;
       });
@@ -807,14 +807,14 @@ bot.on('callback_query', async (callbackQuery) => {
         }
       };
       
-      try {
-        await bot.editMessageText(
-          list,
-          { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
-        );
-      } catch (error) {
-        await bot.sendMessage(chatId, list, { parse_mode: "Markdown", ...keyboard });
-      }
+     try {
+  await bot.editMessageText(
+    list,
+    { chat_id: chatId, message_id: messageId, ...keyboard }
+  );
+} catch (error) {
+  await bot.sendMessage(chatId, list, keyboard);
+}
     }
     await answerCallback(callbackQuery);
   }
@@ -838,7 +838,7 @@ bot.on('callback_query', async (callbackQuery) => {
         await bot.sendMessage(chatId, "📭 Немає активних користувачів за останню добу.");
       }
     } else {
-      let list = "🟢 **Активні користувачі (останні 24 год):**\n\n";
+      let list = "🟢 Активні користувачі (останні 24 год):\n\n";
       users.forEach((user, index) => {
         list += `${index + 1}. ID: ${user.telegramId} | ${user.firstName || 'Без імені'}\n`;
       });
@@ -852,13 +852,13 @@ bot.on('callback_query', async (callbackQuery) => {
       };
       
       try {
-        await bot.editMessageText(
-          list,
-          { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...keyboard }
-        );
-      } catch (error) {
-        await bot.sendMessage(chatId, list, { parse_mode: "Markdown", ...keyboard });
-      }
+  await bot.editMessageText(
+    list,
+    { chat_id: chatId, message_id: messageId, ...keyboard }
+  );
+} catch (error) {
+  await bot.sendMessage(chatId, list, keyboard);
+}
     }
     await answerCallback(callbackQuery);
   }
@@ -1519,10 +1519,20 @@ bot.on('message', async (msg) => {
     return;
   }
   
-  if (text === '📜 Правила') {
-    bot.sendMessage(chatId, `📜 Правила знайомств\n\n${RULES_URL}`);
-    return;
-  }
+ if (text === '📜 Правила') {
+  const keyboard = {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "📖 Читати правила", url: RULES_URL }
+        ]
+      ]
+    }
+  };
+
+  bot.sendMessage(chatId, "📜 Правила знайомств\n\nНатисни кнопку нижче 👇", keyboard);
+  return;
+}
   
   if (text === '📞 Підтримка') {
     bot.sendMessage(chatId, `📞 Підтримка\n\nЗв'язатись з адміністратором: ${SUPPORT_CONTACT}`);
@@ -1536,48 +1546,107 @@ bot.on('message', async (msg) => {
   
   // ПЕРЕВІРКА ЧИ В АКТИВНОМУ ЧАТІ
   if (activeChats.has(userId)) {
-    const partnerId = activeChats.get(userId);
-    
-    try {
-      const fromUser = await User.findOne({ telegramId: userId });
-      const toUser = await User.findOne({ telegramId: partnerId });
-      
-      const messageDoc = new Message({
-        messageId: msg.message_id,
-        fromUserId: userId,
-        fromName: fromUser?.firstName || msg.from.first_name,
-        toUserId: partnerId,
-        toName: toUser?.firstName || 'Користувач',
-        text: text,
-        chatId: chatId
-      });
-      await messageDoc.save();
-      console.log(`💾 Повідомлення збережено: ${userId} -> ${partnerId}`);
-    } catch (error) {
-      console.error('Помилка збереження повідомлення:', error);
+  const partnerId = activeChats.get(userId);
+
+  try {
+    const fromUser = await User.findOne({ telegramId: userId });
+    const toUser = await User.findOne({ telegramId: partnerId });
+
+    let messageType = 'text';
+    let text = msg.text || null;
+    let fileId = null;
+    let caption = msg.caption || null;
+    let fileName = null;
+    let mimeType = null;
+
+    if (msg.photo && msg.photo.length > 0) {
+      messageType = 'photo';
+      fileId = msg.photo[msg.photo.length - 1].file_id;
+    } else if (msg.video) {
+      messageType = 'video';
+      fileId = msg.video.file_id;
+      mimeType = msg.video.mime_type || null;
+    } else if (msg.voice) {
+      messageType = 'voice';
+      fileId = msg.voice.file_id;
+      mimeType = msg.voice.mime_type || null;
+    } else if (msg.document) {
+      messageType = 'document';
+      fileId = msg.document.file_id;
+      fileName = msg.document.file_name || null;
+      mimeType = msg.document.mime_type || null;
+    } else if (msg.sticker) {
+      messageType = 'sticker';
+      fileId = msg.sticker.file_id;
+    } else if (!msg.text) {
+      messageType = 'unsupported';
+      text = '[Непідтримуваний тип повідомлення]';
     }
-    
-    if (await isBlocked(userId)) {
-      await bot.sendMessage(chatId, "❌ Ви заблоковані адміністратором.");
-      await endChat(userId, chatId);
-      return;
-    }
-    
-    if (await isBlocked(partnerId)) {
-      await bot.sendMessage(chatId, "❌ Співрозмовник заблокований адміністратором.");
-      await endChat(userId, chatId);
-      return;
-    }
-    
-    try {
-      await bot.sendMessage(partnerId, `${text}`);
-    } catch (error) {
-      console.error('Помилка пересилання:', error);
-      await bot.sendMessage(chatId, "❌ Не вдалося відправити. Співрозмовник вийшов.");
-      await endChat(userId, chatId);
-    }
+
+    const messageDoc = new Message({
+      messageId: msg.message_id,
+      fromUserId: userId,
+      fromName: fromUser?.firstName || msg.from.first_name,
+      toUserId: partnerId,
+      toName: toUser?.firstName || 'Користувач',
+      text,
+      messageType,
+      fileId,
+      caption,
+      fileName,
+      mimeType,
+      chatId: chatId
+    });
+
+    await messageDoc.save();
+    console.log(`💾 Повідомлення збережено: ${userId} -> ${partnerId} [${messageType}]`);
+  } catch (error) {
+    console.error('Помилка збереження повідомлення:', error);
+  }
+
+  if (await isBlocked(userId)) {
+    await bot.sendMessage(chatId, "❌ Ви заблоковані адміністратором.");
+    await endChat(userId, chatId);
     return;
   }
+
+  if (await isBlocked(partnerId)) {
+    await bot.sendMessage(chatId, "❌ Співрозмовник заблокований адміністратором.");
+    await endChat(userId, chatId);
+    return;
+  }
+
+  try {
+    if (msg.photo && msg.photo.length > 0) {
+      const photoId = msg.photo[msg.photo.length - 1].file_id;
+      await bot.sendPhoto(partnerId, photoId, {
+        caption: msg.caption || ''
+      });
+    } else if (msg.video) {
+      await bot.sendVideo(partnerId, msg.video.file_id, {
+        caption: msg.caption || ''
+      });
+    } else if (msg.voice) {
+      await bot.sendVoice(partnerId, msg.voice.file_id);
+    } else if (msg.document) {
+      await bot.sendDocument(partnerId, msg.document.file_id, {
+        caption: msg.caption || ''
+      });
+    } else if (msg.sticker) {
+      await bot.sendSticker(partnerId, msg.sticker.file_id);
+    } else if (msg.text) {
+      await bot.sendMessage(partnerId, msg.text);
+    } else {
+      await bot.sendMessage(chatId, "❌ Цей тип повідомлення поки не підтримується.");
+    }
+  } catch (error) {
+    console.error('Помилка пересилання:', error);
+    await bot.sendMessage(chatId, "❌ Не вдалося відправити. Співрозмовник вийшов.");
+    await endChat(userId, chatId);
+  }
+
+  return;
+}
   
   // АДМІН-ДІЇ
   const state = userStates.get(userId);

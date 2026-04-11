@@ -57,6 +57,79 @@ async function checkAuth() {
   }
 }
 
+function renderMessageContent(message) {
+  const type = message.messageType || 'text';
+  const mediaUrl = `/api/message-file/${message._id}?adminId=${encodeURIComponent(currentAdminId)}`;
+
+  if (type === 'photo') {
+    return `
+      <div class="message-media-block">
+        <img
+          src="${mediaUrl}"
+          alt="photo"
+          class="message-photo"
+          loading="lazy"
+        />
+        ${message.caption ? `<div class="message-caption">${escapeHtml(message.caption)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  if (type === 'video') {
+    return `
+      <div class="message-media-block">
+        <video controls class="message-video">
+          <source src="${mediaUrl}">
+          Ваш браузер не підтримує відео.
+        </video>
+        ${message.caption ? `<div class="message-caption">${escapeHtml(message.caption)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  if (type === 'voice') {
+    return `
+      <div class="message-media-block">
+        <audio controls class="message-audio">
+          <source src="${mediaUrl}">
+          Ваш браузер не підтримує аудіо.
+        </audio>
+      </div>
+    `;
+  }
+
+  if (type === 'document') {
+    return `
+      <div class="message-media-block">
+        <a
+          href="${mediaUrl}"
+          target="_blank"
+          class="message-file-link"
+          rel="noopener noreferrer"
+        >
+          📎 ${escapeHtml(message.fileName || 'Документ')}
+        </a>
+        ${message.caption ? `<div class="message-caption">${escapeHtml(message.caption)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  if (type === 'sticker') {
+    return `
+      <div class="message-media-block">
+        <img
+          src="${mediaUrl}"
+          alt="sticker"
+          class="message-sticker"
+          loading="lazy"
+        />
+      </div>
+    `;
+  }
+
+  return `<div class="message-bubble">${escapeHtml(message.text || '')}</div>`;
+}
+
 // Функція для отримання кольору аватарки
 function getAvatarColor(id) {
   const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#00f2fe', '#43e97b', '#fa709a', '#fee140', '#30cfd0', '#a8edea'];
@@ -85,6 +158,23 @@ function createAvatar(name, id, isOnline = false, onClick = true) {
       <span class="avatar-initials">${initials}</span>
       ${isOnline ? '<span class="avatar-online"></span>' : ''}
     </div>
+  `;
+}
+
+function getTelegramProfileLink(user) {
+  if (user.username && String(user.username).trim()) {
+    return `https://t.me/${String(user.username).trim()}`;
+  }
+
+  return `tg://user?id=${user.telegramId}`;
+}
+
+function renderTelegramLink(user, text) {
+  const url = getTelegramProfileLink(user);
+  return `
+    <a href="${url}" class="tg-link" target="_blank" rel="noopener noreferrer">
+      ${escapeHtml(text)}
+    </a>
   `;
 }
 
@@ -145,11 +235,20 @@ async function showUserInfo(userId, userName) {
           </div>
         </div>
         <div class="user-modal-footer">
-          ${!user.isBlocked ? 
-            `<button class="block-user-btn" onclick="blockUser(${user.telegramId}); this.closest('.user-modal').remove()">🔒 Блокувати користувача</button>` : 
-            `<button class="unblock-user-btn" onclick="unblockUser(${user.telegramId}); this.closest('.user-modal').remove()">🔓 Розблокувати користувача</button>`
-          }
-        </div>
+  <a
+    href="${getTelegramProfileLink(user)}"
+    class="open-profile-btn"
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    📩 Відкрити в Telegram
+  </a>
+
+  ${!user.isBlocked ? 
+    `<button class="block-user-btn" onclick="blockUser(${user.telegramId}); this.closest('.user-modal').remove()">🔒 Блокувати користувача</button>` : 
+    `<button class="unblock-user-btn" onclick="unblockUser(${user.telegramId}); this.closest('.user-modal').remove()">🔓 Розблокувати користувача</button>`
+  }
+</div>
       </div>
     `;
     document.body.appendChild(modal);
@@ -292,11 +391,11 @@ async function loadChatMessages(user1, user2, element) {
         const avatar = createAvatar(senderName, senderId);
         
         const messagesHtml = messageGroup.map(m => `
-          <div class="message-item">
-            <div class="message-bubble">${escapeHtml(m.text || '')}</div>
-            <div class="message-time">${formatTime(m.timestamp)}</div>
-          </div>
-        `).join('');
+  <div class="message-item">
+    ${renderMessageContent(m)}
+    <div class="message-time">${formatTime(m.timestamp)}</div>
+  </div>
+`).join('');
         
         const messageDiv = document.createElement('div');
         messageDiv.className = `message-wrapper ${isOutgoing ? 'outgoing' : 'incoming'}`;
@@ -357,9 +456,20 @@ async function loadUsers() {
           ${users.map(user => `
             <tr>
               <td class="user-avatar-cell">${createAvatar(user.firstName || user.telegramId, user.telegramId)}</td>
-              <td>${user.telegramId}</td>
-              <td>${escapeHtml(user.firstName || '-')} ${escapeHtml(user.lastName || '')}</td>
-              <td>@${escapeHtml(user.username || '-')}</td>
+              <td>${renderTelegramLink(user, String(user.telegramId))}</td>
+<td>
+  ${renderTelegramLink(
+    user,
+    `${user.firstName || '-'} ${user.lastName || ''}`.trim()
+  )}
+</td>
+<td>
+  ${
+    user.username
+      ? renderTelegramLink(user, `@${user.username}`)
+      : `<span class="muted-text">немає</span>`
+  }
+</td>
               <td>${user.findGender === 'find_boys' ? 'Хлопців' : user.findGender === 'find_girls' ? 'Дівчат' : 'Всіх'}</td>
               <td>${user.userGender === 'iam_boy' ? 'Хлопець' : 'Дівчина'}</td>
               <td>${user.district?.replace('dist_', '') || '-'}</td>

@@ -32,7 +32,18 @@ const messageSchema = new mongoose.Schema({
   fromName: String,
   toUserId: { type: Number, required: true },
   toName: String,
+
   text: String,
+  messageType: {
+    type: String,
+    default: 'text',
+    enum: ['text', 'photo', 'video', 'voice', 'document', 'sticker', 'unsupported']
+  },
+  fileId: String,
+  caption: String,
+  fileName: String,
+  mimeType: String,
+
   timestamp: { type: Date, default: Date.now },
   chatId: Number,
   isReported: { type: Boolean, default: false }

@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const axios = require('axios');
 const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
@@ -49,6 +50,27 @@ async function checkAdmin(req, res, next) {
 async function isSuperAdmin(telegramId) {
   const admin = await Admin.findOne({ telegramId });
   return admin && admin.role === 'super_admin';
+}
+
+function getMessagePreview(msg) {
+  if (!msg) return '...';
+
+  switch (msg.messageType) {
+    case 'photo':
+      return msg.caption ? `📷 Фото: ${msg.caption}` : '📷 Фото';
+    case 'video':
+      return msg.caption ? `🎥 Відео: ${msg.caption}` : '🎥 Відео';
+    case 'voice':
+      return '🎤 Голосове';
+    case 'document':
+      return msg.fileName ? `📎 Документ: ${msg.fileName}` : '📎 Документ';
+    case 'sticker':
+      return '😄 Стікер';
+    case 'text':
+      return msg.text || '...';
+    default:
+      return msg.text || '[Непідтримуване повідомлення]';
+  }
 }
 
 // API маршрути
@@ -128,7 +150,7 @@ app.get('/api/chats', checkAdmin, async (req, res) => {
           user1Name: msg.fromName,
           user2: msg.toUserId,
           user2Name: msg.toName,
-          lastMessage: msg.text,
+          lastMessage: getMessagePreview(msg),
           lastTime: msg.timestamp,
           messages: []
         });
@@ -137,7 +159,7 @@ app.get('/api/chats', checkAdmin, async (req, res) => {
       chat.messages.unshift(msg);
       if (msg.timestamp > chat.lastTime) {
         chat.lastTime = msg.timestamp;
-        chat.lastMessage = msg.text;
+        chat.lastMessage = getMessagePreview(msg);
       }
     }
     
@@ -332,6 +354,48 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+app.get('/api/message-file/:messageId', async (req, res) => {
+  try {
+    const adminId = parseInt(req.query.adminId, 10);
+
+    if (!adminId) {
+      return res.status(403).send('Необхідна авторизація');
+    }
+
+    const admin = await Admin.findOne({ telegramId: adminId });
+    if (!admin) {
+      return res.status(403).send('Доступ заборонено');
+    }
+
+    const message = await Message.findById(req.params.messageId);
+
+    if (!message || !message.fileId) {
+      return res.status(404).send('Файл не знайдено');
+    }
+
+    const token = process.env.BOT_TOKEN;
+    if (!token) {
+      return res.status(500).send('BOT_TOKEN не налаштований');
+    }
+
+    const tgResponse = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
+      params: { file_id: message.fileId }
+    });
+
+    if (!tgResponse.data?.ok || !tgResponse.data?.result?.file_path) {
+      return res.status(404).send('Не вдалося отримати файл з Telegram');
+    }
+
+    const filePath = tgResponse.data.result.file_path;
+    const fileUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
+
+    return res.redirect(fileUrl);
+  } catch (error) {
+    console.error('Помилка отримання файлу:', error.message);
+    return res.status(500).send('Помилка отримання файлу');
+  }
+});
+
 // Запуск сервера після підключення до БД
 async function startServer() {
   try {
@@ -349,10 +413,6 @@ async function startServer() {
     
     console.log('✅ Моделі БД завантажено');
     
-    app.get('/rules', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'rules.html'));
-});
-
     // Запускаємо сервер
     app.listen(PORT, () => {
       console.log(`🌐 Адмін-панель: http://localhost:${PORT}/admin`);
