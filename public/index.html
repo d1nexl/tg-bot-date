@@ -140,10 +140,36 @@
           <p>Управління користувачами бота</p>
         </div>
         <div class="users-table-container">
-          <div class="search-wrapper">
-            <span class="search-icon">🔍</span>
-            <input type="text" class="search-input" id="userSearch" placeholder="Пошук за ID, іменем або username...">
-          </div>
+          <div class="users-toolbar">
+  <div class="search-wrapper">
+    <span class="search-icon">🔍</span>
+    <input type="text" class="search-input" id="userSearch" placeholder="Пошук за ID, іменем або username...">
+  </div>
+
+  <div class="filters-row">
+    <select id="userStatusFilter" class="filter-select">
+      <option value="all">Всі користувачі</option>
+      <option value="in_chat">У чаті</option>
+      <option value="searching">У пошуку</option>
+      <option value="blocked">Заблоковані</option>
+      <option value="active">Активні</option>
+      <option value="inactive">Неактивні 24г</option>
+    </select>
+
+    <select id="userGenderFilter" class="filter-select">
+      <option value="all">Будь-яка стать</option>
+      <option value="iam_boy">Хлопці</option>
+      <option value="iam_girl">Дівчата</option>
+    </select>
+
+    <select id="userFindGenderFilter" class="filter-select">
+      <option value="all">Шукають будь-кого</option>
+      <option value="find_boys">Шукають хлопців</option>
+      <option value="find_girls">Шукають дівчат</option>
+      <option value="find_all">Шукають всіх</option>
+    </select>
+  </div>
+</div>
           <div class="users-list" id="usersList">
             <div class="loading">
               <div class="spinner"></div>

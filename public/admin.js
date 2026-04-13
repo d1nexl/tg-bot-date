@@ -465,76 +465,92 @@ async function loadUsers() {
       headers: { 'X-Telegram-Id': currentAdminId }
     });
     const users = await response.json();
-    
+
     const container = document.getElementById('usersList');
-    
+
     if (users.length === 0) {
       container.innerHTML = '<div class="loading"><div class="spinner"></div><span>Немає користувачів</span></div>';
       return;
     }
-    
+
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+
     container.innerHTML = `
       <table class="users-table">
         <thead>
           <tr>
-  <th>Аватар</th>
-  <th>ID</th>
-  <th>Ім'я</th>
-  <th>Username</th>
-  <th>Шукає</th>
-  <th>Стать</th>
-  <th>Район</th>
-  <th>Онлайн статус</th>
-  <th>Пошук</th>
-  <th>Остання активність</th>
-  <th>Дії</th>
-</tr>
+            <th>Аватар</th>
+            <th>ID</th>
+            <th>Ім'я</th>
+            <th>Username</th>
+            <th>Шукає</th>
+            <th>Стать</th>
+            <th>Район</th>
+            <th>Онлайн статус</th>
+            <th>Пошук</th>
+            <th>Остання активність</th>
+            <th>Дії</th>
+          </tr>
         </thead>
         <tbody>
-          ${users.map(user => `
-  <tr>
-    <td class="user-avatar-cell">${createAvatar(user.firstName || user.telegramId, user.telegramId)}</td>
-    <td>${renderTelegramLink(user, String(user.telegramId))}</td>
-    <td>
-      ${renderTelegramLink(
-        user,
-        `${user.firstName || '-'} ${user.lastName || ''}`.trim()
-      )}
-    </td>
-    <td>
-      ${
-        user.username
-          ? renderTelegramLink(user, `@${user.username}`)
-          : `<span class="muted-text">немає</span>`
-      }
-    </td>
-    <td>${user.findGender === 'find_boys' ? 'Хлопців' : user.findGender === 'find_girls' ? 'Дівчат' : 'Всіх'}</td>
-    <td>${user.userGender === 'iam_boy' ? 'Хлопець' : 'Дівчина'}</td>
-    <td>${user.district?.replace('dist_', '') || '-'}</td>
-    <td>
-      <span class="user-status ${user.isBlocked ? 'blocked' : 'active'}">
-        ${user.isBlocked ? 'Заблокований' : (user.isInChat ? 'У чаті' : 'Активний')}
-      </span>
-    </td>
-    <td>
-      ${
-        user.isSearching
-          ? `<span class="search-status searching">🔍 Шукає</span>`
-          : `<span class="search-status idle">—</span>`
-      }
-    </td>
-    <td>${formatFullDateTime(user.lastActive)}</td>
-    <td>
-      ${!user.isBlocked ? 
-        `<button class="block-btn" onclick="blockUser(${user.telegramId})">🔒 Блокувати</button>` : 
-        `<button class="unblock-btn" onclick="unblockUser(${user.telegramId})">🔓 Розблокувати</button>`
-      }
-    </td>
-  </tr>
-`).join('')}
+          ${users.map(user => {
+            const isActive24h = user.lastActive && (now - new Date(user.lastActive).getTime() <= oneDay);
+
+            return `
+              <tr
+                data-user-id="${user.telegramId}"
+                data-name="${`${user.firstName || ''} ${user.lastName || ''}`.trim().toLowerCase()}"
+                data-username="${(user.username || '').toLowerCase()}"
+                data-status="${user.isBlocked ? 'blocked' : user.isInChat ? 'in_chat' : user.isSearching ? 'searching' : isActive24h ? 'active' : 'inactive'}"
+                data-gender="${user.userGender || ''}"
+                data-find-gender="${user.findGender || ''}"
+              >
+                <td class="user-avatar-cell">${createAvatar(user.firstName || user.telegramId, user.telegramId)}</td>
+                <td>${renderTelegramLink(user, String(user.telegramId))}</td>
+                <td>
+                  ${renderTelegramLink(
+                    user,
+                    `${user.firstName || '-'} ${user.lastName || ''}`.trim()
+                  )}
+                </td>
+                <td>
+                  ${
+                    user.username
+                      ? renderTelegramLink(user, `@${user.username}`)
+                      : `<span class="muted-text">немає</span>`
+                  }
+                </td>
+                <td>${user.findGender === 'find_boys' ? 'Хлопців' : user.findGender === 'find_girls' ? 'Дівчат' : 'Всіх'}</td>
+                <td>${user.userGender === 'iam_boy' ? 'Хлопець' : 'Дівчина'}</td>
+                <td>${user.district?.replace('dist_', '') || '-'}</td>
+                <td>
+                  <span class="user-status ${user.isBlocked ? 'blocked' : 'active'}">
+                    ${user.isBlocked ? 'Заблокований' : (user.isInChat ? 'У чаті' : 'Активний')}
+                  </span>
+                </td>
+                <td>
+                  ${
+                    user.isSearching
+                      ? `<span class="search-status searching">🔍 Шукає</span>`
+                      : `<span class="search-status idle">—</span>`
+                  }
+                </td>
+                <td>${formatFullDateTime(user.lastActive)}</td>
+                <td>
+                  ${!user.isBlocked
+                    ? `<button class="block-btn" onclick="blockUser(${user.telegramId})">🔒 Блокувати</button>`
+                    : `<button class="unblock-btn" onclick="unblockUser(${user.telegramId})">🔓 Розблокувати</button>`
+                  }
+                </td>
+              </tr>
+            `;
+          }).join('')}
         </tbody>
-       </table>
+      </table>
     `;
+
+    applyUserFilters();
   } catch (error) {
     console.error('Error loading users:', error);
   }
@@ -773,6 +789,35 @@ function searchUsers() {
   });
 }
 
+function applyUserFilters() {
+  const searchTerm = (document.getElementById('userSearch')?.value || '').trim().toLowerCase();
+  const statusFilter = document.getElementById('userStatusFilter')?.value || 'all';
+  const genderFilter = document.getElementById('userGenderFilter')?.value || 'all';
+  const findGenderFilter = document.getElementById('userFindGenderFilter')?.value || 'all';
+
+  const rows = document.querySelectorAll('.users-table tbody tr');
+
+  rows.forEach(row => {
+    const rowText = row.textContent.toLowerCase();
+    const rowStatus = row.dataset.status || '';
+    const rowGender = row.dataset.gender || '';
+    const rowFindGender = row.dataset.findGender || '';
+
+    const matchesSearch = !searchTerm || rowText.includes(searchTerm);
+    const matchesStatus = statusFilter === 'all' || rowStatus === statusFilter;
+    const matchesGender = genderFilter === 'all' || rowGender === genderFilter;
+    const matchesFindGender = findGenderFilter === 'all' || rowFindGender === findGenderFilter;
+
+    row.style.display = (matchesSearch && matchesStatus && matchesGender && matchesFindGender)
+      ? ''
+      : 'none';
+  });
+}
+
+function searchUsers() {
+  applyUserFilters();
+}
+
 // Навігація
 function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -846,9 +891,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Пошук користувачів
   const searchInput = document.getElementById('userSearch');
-  if (searchInput) {
-    searchInput.addEventListener('input', searchUsers);
-  }
+if (searchInput) {
+  searchInput.addEventListener('input', searchUsers);
+}
+
+const userStatusFilter = document.getElementById('userStatusFilter');
+if (userStatusFilter) {
+  userStatusFilter.addEventListener('change', applyUserFilters);
+}
+
+const userGenderFilter = document.getElementById('userGenderFilter');
+if (userGenderFilter) {
+  userGenderFilter.addEventListener('change', applyUserFilters);
+}
+
+const userFindGenderFilter = document.getElementById('userFindGenderFilter');
+if (userFindGenderFilter) {
+  userFindGenderFilter.addEventListener('change', applyUserFilters);
+}
   
   // Завантажуємо дашборд
   navigateTo('dashboard');

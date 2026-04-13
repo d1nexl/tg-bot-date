@@ -23,18 +23,40 @@ async function initApp() {
   try {
     await connectDB();
 
+    // Старі чати після рестарту не відновлюємо,
+    // бо зв'язок пар зберігався тільки в оперативній пам'яті
     await User.updateMany(
-      {},
+      { isInChat: true },
       {
         $set: {
-          isSearching: false,
-          isInChat: false,
-          searchStartedAt: null
+          isInChat: false
         }
       }
     );
 
-    console.log('✅ Статуси пошуку та чатів скинуто після запуску');
+    // Відновлення черги пошуку з БД
+    const searchingUsers = await User.find({
+      isSearching: true,
+      isBlocked: false
+    }).select('telegramId');
+
+    waitingUsers.clear();
+
+    for (const user of searchingUsers) {
+      waitingUsers.set(user.telegramId, true);
+    }
+
+    console.log(`✅ Відновлено чергу пошуку: ${searchingUsers.length} користувачів`);
+    console.log('✅ Активні чати після рестарту скинуто');
+
+    // Після відновлення черги пробуємо одразу знайти пари
+    for (const user of searchingUsers) {
+      try {
+        await tryFindMatch(user.telegramId);
+      } catch (e) {
+        console.error(`Помилка відновлення пошуку для ${user.telegramId}:`, e.message);
+      }
+    }
   } catch (error) {
     console.error('❌ Помилка ініціалізації:', error.message);
   }
@@ -58,6 +80,79 @@ async function touchUserActivity(userId, extra = {}) {
   }
 }
 
+async function syncUserSessionState(userId) {
+  const user = await User.findOne({ telegramId: userId });
+
+  if (!user) {
+    activeChats.delete(userId);
+    waitingUsers.delete(userId);
+    return {
+      isInChat: false,
+      isWaiting: false,
+      user: null
+    };
+  }
+
+  // Якщо в БД користувач не в чаті — прибираємо його з локального Map
+  if (!user.isInChat) {
+    const partnerId = activeChats.get(userId);
+    activeChats.delete(userId);
+
+    if (partnerId && activeChats.get(partnerId) === userId) {
+      activeChats.delete(partnerId);
+    }
+  }
+
+  // Якщо в БД користувач не шукає — прибираємо з черги
+  if (!user.isSearching) {
+    waitingUsers.delete(userId);
+  }
+
+  return {
+    isInChat: activeChats.has(userId) || Boolean(user.isInChat),
+    isWaiting: waitingUsers.has(userId) || Boolean(user.isSearching),
+    user
+  };
+}
+
+async function resetUserSession(userId) {
+  const partnerId = activeChats.get(userId);
+
+  activeChats.delete(userId);
+  waitingUsers.delete(userId);
+
+  await User.updateOne(
+    { telegramId: userId },
+    {
+      $set: {
+        isSearching: false,
+        searchStartedAt: null,
+        isInChat: false
+      }
+    }
+  );
+
+  if (partnerId && activeChats.get(partnerId) === userId) {
+    activeChats.delete(partnerId);
+
+    await User.updateOne(
+      { telegramId: partnerId },
+      {
+        $set: {
+          isInChat: false
+        }
+      }
+    );
+
+    try {
+      await bot.sendMessage(partnerId, "❌ Чат було скинуто. Ви повернуті в головне меню.");
+      await updateMainMenu(partnerId, partnerId);
+    } catch (e) {
+      console.error("Не вдалося оновити меню партнеру:", e.message);
+    }
+  }
+}
+
 // Функції перевірки прав (ТІЛЬКИ через БД)
 async function isAdminCheck(userId) {
   const admin = await Admin.findOne({ telegramId: userId });
@@ -76,7 +171,13 @@ bot.onText(/\/start/, async (msg) => {
 
   await touchUserActivity(userId);
 
-  startHandler(bot, msg);
+  // Повний скид завислих станів
+  await resetUserSession(userId);
+
+  // Скидаємо локальний state анкети
+  userStates.delete(userId);
+
+  await startHandler(bot, msg, userStates);
 });
 
 bot.onText(/\/check/, async (msg) => {
@@ -109,11 +210,11 @@ bot.onText(/\/stopsearch/, async (msg) => {
 
 // Функція для оновлення головного меню
 async function updateMainMenu(chatId, userId) {
-  const user = await User.findOne({ telegramId: userId });
+  const { user, isInChat, isWaiting } = await syncUserSessionState(userId);
 
   if (!user || !user.findGender || !user.userGender || !user.district) {
     await bot.sendMessage(chatId, "📝 Спочатку заповніть анкету!");
-    startHandler(bot, { from: { id: userId }, chat: { id: chatId } });
+    await startHandler(bot, msgLike(chatId, userId), userStates);
     return;
   }
 
@@ -123,8 +224,6 @@ async function updateMainMenu(chatId, userId) {
     return;
   }
 
-  const isInChat = activeChats.has(userId);
-  const isWaiting = waitingUsers.has(userId);
   const isAdmin = await isAdminCheck(userId);
 
   let menuKeyboard;
@@ -166,6 +265,13 @@ async function updateMainMenu(chatId, userId) {
       one_time_keyboard: false
     }
   });
+}
+
+function msgLike(chatId, userId) {
+  return {
+    chat: { id: chatId },
+    from: { id: userId }
+  };
 }
 
 bot.onText(/\/admin_panel/, async (msg) => {
@@ -229,18 +335,80 @@ async function answerCallback(callbackQuery, text = '', showAlert = false) {
   } catch (error) {}
 }
 
+function isGenderMatch(seekerPreference, candidateGender) {
+  if (seekerPreference === 'find_all') {
+    return true;
+  }
+
+  if (seekerPreference === 'find_girls') {
+    return candidateGender === 'iam_girl';
+  }
+
+  if (seekerPreference === 'find_boys') {
+    return candidateGender === 'iam_boy';
+  }
+
+  return false;
+}
+
+function isDistrictMatch(user1, user2) {
+  if (!user1?.district || !user2?.district) {
+    return false;
+  }
+
+  return (
+    user1.district === 'dist_all' ||
+    user2.district === 'dist_all' ||
+    user1.district === user2.district
+  );
+}
+
+function getReadableError(error) {
+  return (
+    error?.response?.body?.description ||
+    error?.response?.data?.description ||
+    error?.message ||
+    'Невідома помилка'
+  );
+}
+
 // Функція спроби знайти пару для користувача з черги
 async function tryFindMatch(userId) {
+  const currentUser = await User.findOne({ telegramId: userId });
+
+  if (!currentUser) return false;
+
   const waitingList = Array.from(waitingUsers.keys());
-  
+
   for (const waitingId of waitingList) {
-    if (waitingId !== userId && !activeChats.has(waitingId)) {
+    if (waitingId === userId) continue;
+    if (activeChats.has(waitingId)) continue;
+
+    const candidateUser = await User.findOne({ telegramId: waitingId });
+    if (!candidateUser) continue;
+    if (candidateUser.isBlocked || currentUser.isBlocked) continue;
+
+    const currentUserLikesCandidate =
+      isGenderMatch(currentUser.findGender, candidateUser.userGender);
+
+    const candidateLikesCurrentUser =
+      isGenderMatch(candidateUser.findGender, currentUser.userGender);
+
+    const districtMatches = isDistrictMatch(currentUser, candidateUser);
+
+    if (
+      currentUserLikesCandidate &&
+      candidateLikesCurrentUser &&
+      districtMatches
+    ) {
       waitingUsers.delete(waitingId);
       waitingUsers.delete(userId);
+
       await createChat(userId, waitingId);
       return true;
     }
   }
+
   return false;
 }
 
@@ -700,6 +868,12 @@ bot.on('callback_query', async (callbackQuery) => {
   // ========== 6. ПОШУК ==========
   else if (data === 'search') {
     const user = await User.findOne({ telegramId: userId });
+
+    if (!user.findGender || !user.userGender || !user.district) {
+  await bot.sendMessage(chatId, "❌ Спочатку заповніть анкету через /start");
+  await answerCallback(callbackQuery);
+  return;
+}
     
     if (!user) {
       await bot.sendMessage(chatId, "❌ Спочатку пройдіть реєстрацію через /start");
@@ -726,7 +900,7 @@ await touchUserActivity(userId, {
   searchStartedAt: new Date(),
   isInChat: false
 });
-    await bot.sendMessage(chatId, "🔍 Шукаємо співрозмовника... Очікуйте. Натисніть '⏹️ Припинити пошук' щоб скасувати.");
+    await bot.sendMessage(chatId, "🔍 Шукаємо співрозмовника... Очікуйте. Натисніть '⏹️ Зупинити пошук' щоб скасувати.");
     await updateMainMenu(chatId, userId);
     
     const found = await tryFindMatch(userId);
@@ -1720,10 +1894,28 @@ bot.on('message', async (msg) => {
       await bot.sendMessage(chatId, "❌ Цей тип повідомлення поки не підтримується.");
     }
   } catch (error) {
-    console.error('Помилка пересилання:', error);
-    await bot.sendMessage(chatId, "❌ Не вдалося відправити. Співрозмовник вийшов.");
+  const tgDescription =
+    error?.response?.body?.description ||
+    error?.response?.data?.description ||
+    error?.message ||
+    'Невідома помилка';
+
+  console.error('Помилка пересилання:', tgDescription);
+
+  // Якщо партнер недоступний — одразу завершуємо чат з обох боків
+  if (
+    tgDescription.includes('blocked by the user') ||
+    tgDescription.includes('chat not found') ||
+    tgDescription.includes('user is deactivated') ||
+    tgDescription.includes("bot can't initiate conversation")
+  ) {
+    await bot.sendMessage(chatId, "❌ Не вдалося відправити повідомлення. Співрозмовник недоступний, чат завершено.");
     await endChat(userId, chatId);
+    return;
   }
+
+  await bot.sendMessage(chatId, "❌ Не вдалося відправити повідомлення.");
+}
 
   return;
 }

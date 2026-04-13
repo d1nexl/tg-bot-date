@@ -1,13 +1,13 @@
 const { whoToFindKeyboard } = require('../utils/keyboard');
 
-module.exports = async (bot, msg) => {
+module.exports = async (bot, msg, userStates) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
-  
-  // Зберігаємо стан для нового користувача або скидаємо старий
-  if (!global.userStates) global.userStates = new Map();
-  global.userStates.set(userId, { step: 'who_to_find' });
-  
+
+  if (userStates) {
+    userStates.set(userId, { step: 'who_to_find' });
+  }
+
   await bot.sendMessage(
     chatId,
     "👋 **Ласкаво просимо до бота знайомств Закарпаття!**\n\n" +
