@@ -165,7 +165,7 @@ async function isSuperAdminCheck(userId) {
 }
 
 // Команда /start
-bot.onText(/\/start/, async (msg) => {
+bot.onText(/^\/start(?:@\w+)?(?:\s+.*)?$/, async (msg) => {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
 
@@ -794,76 +794,106 @@ bot.on('callback_query', async (callbackQuery) => {
   }
   
   else if (data.startsWith('dist_')) {
-    const state = userStates.get(userId);
-    if (state && state.editing === 'district') {
-      await updateUserProfile(userId, 'district', data, chatId);
-      userStates.delete(userId);
-      await bot.sendMessage(chatId, "⚙️ Повернення в налаштування:", { ...settingsKeyboard });
-      await answerCallback(callbackQuery);
-      return;
-    } else if (!state || !state.editing) {
-      if (!userStates.has(userId)) {
-        userStates.set(userId, { step: 'who_to_find' });
-      }
-      const newState = userStates.get(userId);
-      newState.district = data;
-      newState.step = 'completed';
-      
-      let districtName = '';
-      switch(data) {
-        case 'dist_Tiachiv': districtName = 'Тячівський'; break;
-        case 'dist_Rakhiv': districtName = 'Рахівський'; break;
-        case 'dist_Mukachevo': districtName = 'Мукачівський'; break;
-        case 'dist_Berehove': districtName = 'Берегівський'; break;
-        case 'dist_Khust': districtName = 'Хустський'; break;
-        case 'dist_Uzhhorod': districtName = 'Ужгородський'; break;
-        case 'dist_all': districtName = 'ВСЕ ЗАКАРПАТТЯ'; break;
-      }
-      
-      try {
-        const existingUser = await User.findOne({ telegramId: userId });
-        
-        const userData = {
-          username: callbackQuery.from.username,
-          firstName: callbackQuery.from.first_name,
-          lastName: callbackQuery.from.last_name,
-          findGender: newState.findGender,
-          userGender: newState.userGender,
-          district: newState.district,
-          lastActive: new Date()
-        };
-        
-        if (!existingUser) {
-          const newUser = new User({
-            telegramId: userId,
-            ...userData
-          });
-          await newUser.save();
-          console.log(`✅ Нового користувача ${userId} збережено в БД`);
-        } else {
-          await User.updateOne(
-            { telegramId: userId },
-            { ...userData }
-          );
-          console.log(`✅ Дані користувача ${userId} оновлено`);
-        }
-      } catch (dbError) {
-        console.error('Помилка БД:', dbError.message);
-      }
-      
-      try {
-        await bot.editMessageText(
-          `✅ Налаштування завершено!\n\n📊 Ваші параметри збережено!\n• Шукаєте: ${newState.findGender === 'find_boys' ? 'хлопців' : newState.findGender === 'find_girls' ? 'дівчат' : 'всіх'}\n• Ви: ${newState.userGender === 'iam_boy' ? 'хлопець' : 'дівчина'}\n• Район: ${districtName}\n\n👇 Головне меню:`,
-          { chat_id: chatId, message_id: messageId }
-        );
-      } catch (error) {
-        await bot.sendMessage(chatId, `✅ Налаштування завершено!\n\n📊 Ваші параметри збережено!\n• Шукаєте: ${newState.findGender === 'find_boys' ? 'хлопців' : newState.findGender === 'find_girls' ? 'дівчат' : 'всіх'}\n• Ви: ${newState.userGender === 'iam_boy' ? 'хлопець' : 'дівчина'}\n• Район: ${districtName}`);
-      }
-      
-      await updateMainMenu(chatId, userId);
+  // Перевірка - чи вибрано недоступний регіон
+  if (data === 'dist_unavailable') {
+    await bot.answerCallbackQuery(callbackQuery.id, {
+      text: "❌ Цей регіон тимчасово недоступний. Будь ласка, оберіть 'ВСЕ ЗАКАРПАТТЯ'",
+      show_alert: true
+    });
+    
+    // Оновлюємо повідомлення з поясненням
+    try {
+      await bot.editMessageText(
+        "📍 **Виберіть район для пошуку:**\n\n" +
+        "⚠️ **Увага!** Наразі доступний лише варіант **«ВСЕ ЗАКАРПАТТЯ»**.\n" +
+        "Інші регіони тимчасово недоступні через технічні причини.\n\n" +
+        "💡 *Рекомендуємо обрати «ВСЕ ЗАКАРПАТТЯ», щоб знаходити більше співрозмовників!*",
+        { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", ...districtKeyboard }
+      );
+    } catch (error) {
+      // Якщо не вдалося відредагувати, надсилаємо нове повідомлення
+      await bot.sendMessage(chatId, 
+        "📍 **Виберіть район для пошуку:**\n\n" +
+        "⚠️ **Увага!** Наразі доступний лише варіант **«ВСЕ ЗАКАРПАТТЯ»**.\n" +
+        "Інші регіони тимчасово недоступні через технічні причини.\n\n" +
+        "💡 *Рекомендуємо обрати «ВСЕ ЗАКАРПАТТЯ», щоб знаходити більше співрозмовників!*", 
+        { parse_mode: "Markdown", ...districtKeyboard }
+      );
     }
     await answerCallback(callbackQuery);
+    return;
   }
+
+  const state = userStates.get(userId);
+  if (state && state.editing === 'district') {
+    await updateUserProfile(userId, 'district', data, chatId);
+    userStates.delete(userId);
+    await bot.sendMessage(chatId, "⚙️ Повернення в налаштування:", { ...settingsKeyboard });
+    await answerCallback(callbackQuery);
+    return;
+  } else if (!state || !state.editing) {
+    if (!userStates.has(userId)) {
+      userStates.set(userId, { step: 'who_to_find' });
+    }
+    const newState = userStates.get(userId);
+    newState.district = data;
+    newState.step = 'completed';
+    
+    let districtName = '';
+    switch(data) {
+      case 'dist_Tiachiv': districtName = 'Тячівський'; break;
+      case 'dist_Rakhiv': districtName = 'Рахівський'; break;
+      case 'dist_Mukachevo': districtName = 'Мукачівський'; break;
+      case 'dist_Berehove': districtName = 'Берегівський'; break;
+      case 'dist_Khust': districtName = 'Хустський'; break;
+      case 'dist_Uzhhorod': districtName = 'Ужгородський'; break;
+      case 'dist_all': districtName = 'ВСЕ ЗАКАРПАТТЯ'; break;
+    }
+    
+    try {
+      const existingUser = await User.findOne({ telegramId: userId });
+      
+      const userData = {
+        username: callbackQuery.from.username,
+        firstName: callbackQuery.from.first_name,
+        lastName: callbackQuery.from.last_name,
+        findGender: newState.findGender,
+        userGender: newState.userGender,
+        district: newState.district,
+        lastActive: new Date()
+      };
+      
+      if (!existingUser) {
+        const newUser = new User({
+          telegramId: userId,
+          ...userData
+        });
+        await newUser.save();
+        console.log(`✅ Нового користувача ${userId} збережено в БД`);
+      } else {
+        await User.updateOne(
+          { telegramId: userId },
+          { ...userData }
+        );
+        console.log(`✅ Дані користувача ${userId} оновлено`);
+      }
+    } catch (dbError) {
+      console.error('Помилка БД:', dbError.message);
+    }
+    
+    try {
+      await bot.editMessageText(
+        `✅ Налаштування завершено!\n\n📊 Ваші параметри збережено!\n• Шукаєте: ${newState.findGender === 'find_boys' ? 'хлопців' : newState.findGender === 'find_girls' ? 'дівчат' : 'всіх'}\n• Ви: ${newState.userGender === 'iam_boy' ? 'хлопець' : 'дівчина'}\n• Район: ${districtName}\n\n👇 Головне меню:`,
+        { chat_id: chatId, message_id: messageId }
+      );
+    } catch (error) {
+      await bot.sendMessage(chatId, `✅ Налаштування завершено!\n\n📊 Ваші параметри збережено!\n• Шукаєте: ${newState.findGender === 'find_boys' ? 'хлопців' : newState.findGender === 'find_girls' ? 'дівчат' : 'всіх'}\n• Ви: ${newState.userGender === 'iam_boy' ? 'хлопець' : 'дівчина'}\n• Район: ${districtName}`);
+    }
+    
+    await updateMainMenu(chatId, userId);
+  }
+  await answerCallback(callbackQuery);
+}
   
   // ========== 6. ПОШУК ==========
   else if (data === 'search') {

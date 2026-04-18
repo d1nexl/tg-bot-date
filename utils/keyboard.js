@@ -25,24 +25,24 @@ const whoAreYouKeyboard = {
   }
 };
 
-// Райони
+// Райони - оновлена версія з попередженням
 const districtKeyboard = {
   reply_markup: {
     inline_keyboard: [
       [
-        { text: "Тячівський", callback_data: "dist_Tiachiv" },
-        { text: "Рахівський", callback_data: "dist_Rakhiv" }
+        { text: "✅ ВСЕ ЗАКАРПАТТЯ", callback_data: "dist_all" }
       ],
       [
-        { text: "Мукачівський", callback_data: "dist_Mukachevo" },
-        { text: "Берегівський", callback_data: "dist_Berehove" }
+        { text: "❌ Тячівський (недоступний)", callback_data: "dist_unavailable" },
+        { text: "❌ Рахівський (недоступний)", callback_data: "dist_unavailable" }
       ],
       [
-        { text: "Хустський", callback_data: "dist_Khust" },
-        { text: "Ужгородський", callback_data: "dist_Uzhhorod" }
+        { text: "❌ Мукачівський (недоступний)", callback_data: "dist_unavailable" },
+        { text: "❌ Берегівський (недоступний)", callback_data: "dist_unavailable" }
       ],
       [
-        { text: "🌍 ВСЕ ЗАКАРПАТТЯ", callback_data: "dist_all" }
+        { text: "❌ Хустський (недоступний)", callback_data: "dist_unavailable" },
+        { text: "❌ Ужгородський (недоступний)", callback_data: "dist_unavailable" }
       ]
     ]
   }
@@ -59,7 +59,6 @@ const settingsKeyboard = {
     ]
   }
 };
-
 
 module.exports = {
   whoToFindKeyboard,

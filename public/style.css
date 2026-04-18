@@ -475,12 +475,57 @@ body {
   box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
 }
 
+.users-top-scroll-wrap {
+  position: sticky;
+  top: 24px;
+  z-index: 40;
+  background: white;
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+}
+
+.users-top-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 14px;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.users-top-scroll-inner {
+  height: 1px;
+}
+
+.users-top-scroll::-webkit-scrollbar,
+.users-list::-webkit-scrollbar {
+  height: 12px;
+}
+
+.users-top-scroll::-webkit-scrollbar-track,
+.users-list::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+
+.users-top-scroll::-webkit-scrollbar-thumb,
+.users-list::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 999px;
+}
+
+.users-top-scroll::-webkit-scrollbar-thumb:hover,
+.users-list::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
 .users-list {
   overflow-x: auto;
+  overflow-y: visible;
 }
 
 .users-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
 }
 
@@ -1232,6 +1277,14 @@ body {
 }
 
 /* Responsive */
+
+
+@media (max-width: 1024px) {
+  .users-top-scroll-wrap {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
   .sidebar {
     transform: translateX(-100%);

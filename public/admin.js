@@ -458,6 +458,34 @@ function updateChatHeader() {
   return;
 }
 
+function initUsersTopScroll() {
+  const topScroll = document.getElementById('usersTopScroll');
+  const topScrollInner = document.getElementById('usersTopScrollInner');
+  const usersList = document.getElementById('usersList');
+  const table = usersList?.querySelector('.users-table');
+
+  if (!topScroll || !topScrollInner || !usersList || !table) return;
+
+  topScrollInner.style.width = `${table.scrollWidth}px`;
+
+  let syncingFromTop = false;
+  let syncingFromBottom = false;
+
+  topScroll.addEventListener('scroll', () => {
+    if (syncingFromBottom) return;
+    syncingFromTop = true;
+    usersList.scrollLeft = topScroll.scrollLeft;
+    syncingFromTop = false;
+  });
+
+  usersList.addEventListener('scroll', () => {
+    if (syncingFromTop) return;
+    syncingFromBottom = true;
+    topScroll.scrollLeft = usersList.scrollLeft;
+    syncingFromBottom = false;
+  });
+}
+
 // Завантаження користувачів
 async function loadUsers() {
   try {
@@ -551,6 +579,7 @@ async function loadUsers() {
     `;
 
     applyUserFilters();
+    initUsersTopScroll();
   } catch (error) {
     console.error('Error loading users:', error);
   }
@@ -817,6 +846,10 @@ function applyUserFilters() {
 function searchUsers() {
   applyUserFilters();
 }
+
+window.addEventListener('resize', () => {
+  initUsersTopScroll();
+});
 
 // Навігація
 function navigateTo(page) {
